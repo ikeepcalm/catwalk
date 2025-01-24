@@ -1,7 +1,7 @@
-package io.servertap.webhooks.models.events;
+package dev.ua.uaproject.catwalk.webhooks.models.events;
 
 import com.google.gson.annotations.Expose;
-import io.servertap.api.v1.models.Player;
+import dev.ua.uaproject.catwalk.api.v1.models.Player;
 
 public class PlayerJoinWebhookEvent extends WebhookEvent {
     @Expose

@@ -1,7 +1,7 @@
-package io.servertap.utils;
+package dev.ua.uaproject.catwalk.utils;
 
-import io.servertap.ServerTapMain;
-import io.servertap.api.v1.models.ConsoleLine;
+import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.api.v1.models.ConsoleLine;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.core.Filter;
@@ -14,10 +14,10 @@ import java.util.List;
 import java.util.function.Consumer;
 
 public class ConsoleListener implements Filter {
-    private final ServerTapMain plugin;
+    private final CatWalkMain plugin;
     private final List<Consumer<ConsoleLine>> listeners = new ArrayList<>();
 
-    public ConsoleListener(ServerTapMain main) {
+    public ConsoleListener(CatWalkMain main) {
         this.plugin = main;
     }
 

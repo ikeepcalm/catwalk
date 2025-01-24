@@ -1,6 +1,6 @@
-package io.servertap.webhooks;
+package dev.ua.uaproject.catwalk.webhooks;
 
-import io.servertap.webhooks.models.events.WebhookEvent;
+import dev.ua.uaproject.catwalk.webhooks.models.events.WebhookEvent;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.net.MalformedURLException;
@@ -39,20 +39,20 @@ public class Webhook {
         // Check for listener parameter and validate it
         String listenerUrl = bukkitConfig.getString(configPath + "listener");
         if (listenerUrl == null) {
-            log.warning(String.format("[ServerTap] Warning: webhook '%s' doesn't have 'listener' set", webhookName));
+            log.warning(String.format("[CatWalk] Warning: webhook '%s' doesn't have 'listener' set", webhookName));
             return Optional.empty();
         }
 
         try {
             new URL(listenerUrl);
         } catch (MalformedURLException ex) {
-            log.warning(String.format("[ServerTap] Warning: webhook '%s' url is invalid", webhookName));
+            log.warning(String.format("[CatWalk] Warning: webhook '%s' url is invalid", webhookName));
             return Optional.empty();
         }
 
         // Check for events parameter
         if (!bukkitConfig.isSet(configPath + "events")) {
-            log.warning(String.format("[ServerTap] Warning: webhook '%s' doesn't have 'events' set", webhookName));
+            log.warning(String.format("[CatWalk] Warning: webhook '%s' doesn't have 'events' set", webhookName));
             return Optional.empty();
         }
 
@@ -71,7 +71,7 @@ public class Webhook {
             if (singleEvent != null) {
                 configEvents.add(singleEvent);
             } else {
-                log.warning(String.format("[ServerTap] Warning: webhook \"%s\" doesn't register any events", webhookName));
+                log.warning(String.format("[CatWalk] Warning: webhook \"%s\" doesn't register any events", webhookName));
                 return events;
             }
         }
@@ -81,13 +81,13 @@ public class Webhook {
                 WebhookEvent.EventType eventType = WebhookEvent.EventType.valueOf(event);
 
                 if (events.contains(eventType)) {
-                    log.warning(String.format("[ServerTap] Warning: webhook '%s' registers duplicate event '%s'", webhookName, event));
+                    log.warning(String.format("[CatWalk] Warning: webhook '%s' registers duplicate event '%s'", webhookName, event));
                     continue;
                 }
 
                 events.add(eventType);
             } catch (IllegalArgumentException ex) {
-                log.warning(String.format("[ServerTap] Warning: webhook '%s' attempts to register invalid event '%s'", webhookName, event));
+                log.warning(String.format("[CatWalk] Warning: webhook '%s' attempts to register invalid event '%s'", webhookName, event));
             }
         }
         return events;

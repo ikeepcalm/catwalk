@@ -1,4 +1,4 @@
-package io.servertap.webhooks.models.events;
+package dev.ua.uaproject.catwalk.webhooks.models.events;
 
 import com.google.gson.annotations.Expose;
 

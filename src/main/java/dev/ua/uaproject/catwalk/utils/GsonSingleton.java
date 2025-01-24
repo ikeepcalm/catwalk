@@ -1,4 +1,4 @@
-package io.servertap.utils;
+package dev.ua.uaproject.catwalk.utils;
 
 import com.google.gson.Gson;
 

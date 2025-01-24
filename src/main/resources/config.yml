@@ -1,14 +1,14 @@
 port: 4567
 debug: false
 useKeyAuth: true
-key: 'change_me'
+key: 'changed'
 normalizeMessages: true
 
 # TLS (a.k.a. SSL) options
 tls:
   # Set to true to enable TLS
   enabled: false
-  # The path to your keystore (relative to ServerTap's plugin dir)
+  # The path to your keystore (relative to CatWalk's plugin dir)
   keystore: keystore.jks
   # The password for the keystore
   keystorePassword: ""

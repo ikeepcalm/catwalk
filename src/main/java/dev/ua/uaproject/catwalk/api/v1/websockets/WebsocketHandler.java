@@ -1,10 +1,10 @@
-package io.servertap.api.v1.websockets;
+package dev.ua.uaproject.catwalk.api.v1.websockets;
 
 import io.javalin.websocket.WsConfig;
 import io.javalin.websocket.WsContext;
-import io.servertap.ServerTapMain;
-import io.servertap.api.v1.models.ConsoleLine;
-import io.servertap.utils.ConsoleListener;
+import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.api.v1.models.ConsoleLine;
+import dev.ua.uaproject.catwalk.utils.ConsoleListener;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 
@@ -14,10 +14,10 @@ import java.util.logging.Logger;
 
 public class WebsocketHandler {
     private final Map<String, WsContext> subscribers;
-    private final ServerTapMain main;
+    private final CatWalkMain main;
     private final Logger log;
 
-    public WebsocketHandler(ServerTapMain main, Logger log, ConsoleListener consoleListener) {
+    public WebsocketHandler(CatWalkMain main, Logger log, ConsoleListener consoleListener) {
         subscribers = new ConcurrentHashMap<>();
         this.main = main;
         this.log = log;

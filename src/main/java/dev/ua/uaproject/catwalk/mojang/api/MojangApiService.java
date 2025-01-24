@@ -1,20 +1,16 @@
-package io.servertap.mojang.api;
+package dev.ua.uaproject.catwalk.mojang.api;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-import io.servertap.mojang.api.models.NameChange;
-import io.servertap.mojang.api.models.PlayerInfo;
-import io.servertap.utils.GsonSingleton;
+import dev.ua.uaproject.catwalk.mojang.api.models.PlayerInfo;
+import dev.ua.uaproject.catwalk.utils.GsonSingleton;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.List;
 import java.util.stream.Collectors;
 
 public class MojangApiService {

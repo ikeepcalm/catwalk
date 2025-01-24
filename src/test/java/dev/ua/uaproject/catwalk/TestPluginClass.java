@@ -1,4 +1,4 @@
-package io.servertap;
+package dev.ua.uaproject.catwalk;
 
 import be.seeseemelk.mockbukkit.MockBukkit;
 import be.seeseemelk.mockbukkit.ServerMock;
@@ -9,14 +9,14 @@ import org.junit.jupiter.api.*;
 
 public class TestPluginClass {
     private static ServerMock server;
-    private static ServerTapMain plugin;
+    private static CatWalkMain plugin;
 
     private static final String TEST_URL_BASE = "http://localhost:4567";
 
     @BeforeAll
     public static void setUp() {
         server = MockBukkit.mock();
-        plugin = MockBukkit.load(ServerTapMain.class);
+        plugin = MockBukkit.load(CatWalkMain.class);
     }
 
     @AfterAll

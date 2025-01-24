@@ -1,10 +1,10 @@
-package io.servertap.api.v1;
+package dev.ua.uaproject.catwalk.api.v1;
 
-import io.servertap.ServerTapMain;
-import io.servertap.utils.ConsoleListener;
-import io.servertap.api.v1.websockets.WebsocketHandler;
-import io.servertap.utils.LagDetector;
-import io.servertap.utils.pluginwrappers.ExternalPluginWrapperRepo;
+import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.utils.ConsoleListener;
+import dev.ua.uaproject.catwalk.api.v1.websockets.WebsocketHandler;
+import dev.ua.uaproject.catwalk.utils.LagDetector;
+import dev.ua.uaproject.catwalk.utils.pluginwrappers.ExternalPluginWrapperRepo;
 
 import java.util.logging.Logger;
 
@@ -18,7 +18,7 @@ public class ApiV1Initializer {
     private final WorldApi worldApi;
     private final PAPIApi papiApi;
 
-    public ApiV1Initializer(ServerTapMain main, Logger log, LagDetector lagDetector, ConsoleListener consoleListener,
+    public ApiV1Initializer(CatWalkMain main, Logger log, LagDetector lagDetector, ConsoleListener consoleListener,
                             ExternalPluginWrapperRepo externalPluginWrapperRepo) {
         this.websocketHandler = new WebsocketHandler(main, log, consoleListener);
         this.advancementsApi = new AdvancementsApi();

@@ -1,4 +1,4 @@
-package io.servertap.listeners;
+package dev.ua.uaproject.catwalk.listeners;
 
 public class EndpointListener {
 }

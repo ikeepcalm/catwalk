@@ -1,4 +1,4 @@
-package io.servertap;
+package dev.ua.uaproject.catwalk;
 
 public class Constants {
 

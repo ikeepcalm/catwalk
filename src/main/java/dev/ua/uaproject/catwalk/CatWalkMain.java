@@ -2,10 +2,10 @@ package dev.ua.uaproject.catwalk;
 
 import io.papermc.paper.plugin.configuration.PluginMeta;
 import dev.ua.uaproject.catwalk.api.v1.models.ConsoleLine;
-import dev.ua.uaproject.catwalk.commands.ServerTapCommand;
+import dev.ua.uaproject.catwalk.commands.CatWalkCommand;
 import dev.ua.uaproject.catwalk.metrics.Metrics;
-import dev.ua.uaproject.catwalk.plugin.api.ServerTapWebserverService;
-import dev.ua.uaproject.catwalk.plugin.api.ServerTapWebserverServiceImpl;
+import dev.ua.uaproject.catwalk.plugin.api.CatWalkWebserverService;
+import dev.ua.uaproject.catwalk.plugin.api.CatWalkWebserverServiceImpl;
 import dev.ua.uaproject.catwalk.utils.ConsoleListener;
 import dev.ua.uaproject.catwalk.utils.LagDetector;
 import dev.ua.uaproject.catwalk.utils.pluginwrappers.ExternalPluginWrapperRepo;
@@ -21,7 +21,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ServerTapMain extends JavaPlugin {
+public class CatWalkMain extends JavaPlugin {
 
     private static final java.util.logging.Logger log = Bukkit.getLogger();
     private final Logger rootLogger = (Logger) LogManager.getRootLogger();
@@ -30,12 +30,12 @@ public class ServerTapMain extends JavaPlugin {
     private WebhookEventListener webhookEventListener;
     private int maxConsoleBufferSize = 1000;
     private ConsoleListener consoleListener;
-    public static ServerTapMain instance;
+    public static CatWalkMain instance;
     private final LagDetector lagDetector;
     private final Server server;
     private WebServer app;
 
-    public ServerTapMain() {
+    public CatWalkMain() {
         super();
         instance = this;
         server = getServer();
@@ -63,12 +63,12 @@ public class ServerTapMain extends JavaPlugin {
 
         setupWebServer(bukkitConfig);
 
-        new ServerTapCommand(this);
+        new CatWalkCommand(this);
 
         webhookEventListener = new WebhookEventListener(this, bukkitConfig, log, externalPluginWrapperRepo.getEconomyWrapper());
         server.getPluginManager().registerEvents(webhookEventListener, this);
 
-        server.getServicesManager().register(ServerTapWebserverService.class, new ServerTapWebserverServiceImpl(this), this, ServicePriority.Normal);
+        server.getServicesManager().register(CatWalkWebserverService.class, new CatWalkWebserverServiceImpl(this), this, ServicePriority.Normal);
     }
 
     private void setupWebServer(FileConfiguration bukkitConfig) {
@@ -81,7 +81,7 @@ public class ServerTapMain extends JavaPlugin {
         if (app != null) {
             app.stop();
         }
-        log.info("[ServerTap] ServerTap reloading...");
+        log.info("[CatWalk] CatWalk reloading...");
         reloadConfig();
         FileConfiguration bukkitConfig = getConfig();
         maxConsoleBufferSize = bukkitConfig.getInt("websocketConsoleBuffer");
@@ -92,7 +92,7 @@ public class ServerTapMain extends JavaPlugin {
         setupWebServer(bukkitConfig);
 
         webhookEventListener.loadWebhooksFromConfig(bukkitConfig);
-        log.info("[ServerTap] ServerTap reloaded successfully!");
+        log.info("[CatWalk] CatWalk reloaded successfully!");
     }
 
     @Override

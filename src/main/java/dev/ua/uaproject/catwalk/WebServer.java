@@ -1,4 +1,4 @@
-package io.servertap;
+package dev.ua.uaproject.catwalk;
 
 import io.javalin.Javalin;
 import io.javalin.community.ssl.SSLPlugin;
@@ -12,7 +12,7 @@ import io.javalin.openapi.plugin.swagger.SwaggerConfiguration;
 import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 import io.javalin.security.RouteRole;
 import io.javalin.websocket.WsConfig;
-import io.servertap.utils.GsonJsonMapper;
+import dev.ua.uaproject.catwalk.utils.GsonJsonMapper;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.io.File;
@@ -43,7 +43,7 @@ public class WebServer {
     private final List<String> corsOrigin;
     private final int securePort;
 
-    public WebServer(ServerTapMain main, FileConfiguration bukkitConfig, Logger logger) {
+    public WebServer(CatWalkMain main, FileConfiguration bukkitConfig, Logger logger) {
         this.log = logger;
 
         this.isDebug = bukkitConfig.getBoolean("debug", false);
@@ -65,7 +65,7 @@ public class WebServer {
         }
     }
 
-    private void configureJavalin(JavalinConfig config, ServerTapMain main) {
+    private void configureJavalin(JavalinConfig config, CatWalkMain main) {
         config.jsonMapper(new GsonJsonMapper());
         config.http.defaultContentType = "application/json";
         config.showJavalinBanner = false;
@@ -74,9 +74,9 @@ public class WebServer {
         configureCors(config);
 
         if (isAuthEnabled && "change_me".equals(authKey)) {
-            log.warning("[ServerTap] AUTH KEY IS SET TO DEFAULT \"change_me\"");
-            log.warning("[ServerTap] CHANGE THE key IN THE config.yml FILE");
-            log.warning("[ServerTap] FAILURE TO CHANGE THE KEY MAY RESULT IN SERVER COMPROMISE");
+            log.warning("[CatWalk] AUTH KEY IS SET TO DEFAULT \"change_me\"");
+            log.warning("[CatWalk] CHANGE THE key IN THE config.yml FILE");
+            log.warning("[CatWalk] FAILURE TO CHANGE THE KEY MAY RESULT IN SERVER COMPROMISE");
         }
         config.accessManager(this::manageAccess);
 
@@ -128,20 +128,20 @@ public class WebServer {
     private void configureCors(JavalinConfig config) {
         config.plugins.enableCors(cors -> cors.add(corsConfig -> {
             if (corsOrigin.contains("*")) {
-                log.info("[ServerTap] Enabling CORS for *");
+                log.info("[CatWalk] Enabling CORS for *");
                 corsConfig.anyHost();
             } else {
                 corsOrigin.forEach(origin -> {
-                    log.info(String.format("[ServerTap] Enabling CORS for %s", origin));
+                    log.info(String.format("[CatWalk] Enabling CORS for %s", origin));
                     corsConfig.allowHost(origin);
                 });
             }
         }));
     }
 
-    private void configureTLS(JavalinConfig config, ServerTapMain main) {
+    private void configureTLS(JavalinConfig config, CatWalkMain main) {
         if (!tlsEnabled) {
-            log.warning("[ServerTap] TLS is not enabled.");
+            log.warning("[CatWalk] TLS is not enabled.");
             return;
         }
         try {
@@ -158,17 +158,17 @@ public class WebServer {
                     conf.sniHostCheck = sni;
                 });
                 config.plugins.register(plugin);
-                log.info("[ServerTap] TLS is enabled.");
+                log.info("[CatWalk] TLS is enabled.");
             } else {
-                log.warning(String.format("[ServerTap] TLS is enabled but %s doesn't exist. TLS disabled.", fullKeystorePath));
+                log.warning(String.format("[CatWalk] TLS is enabled but %s doesn't exist. TLS disabled.", fullKeystorePath));
             }
         } catch (Exception e) {
-            log.severe("[ServerTap] Error while enabling TLS: " + e.getMessage());
-            log.warning("[ServerTap] TLS is not enabled.");
+            log.severe("[CatWalk] Error while enabling TLS: " + e.getMessage());
+            log.warning("[CatWalk] TLS is not enabled.");
         }
     }
 
-    private OpenApiPluginConfiguration getOpenApiConfig(ServerTapMain main) {
+    private OpenApiPluginConfiguration getOpenApiConfig(CatWalkMain main) {
         return new OpenApiPluginConfiguration()
                 .withDocumentationPath("/swagger-docs")
                 .withDefinitionConfiguration((version, definition) -> definition

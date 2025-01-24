@@ -1,12 +1,12 @@
-package io.servertap.api.v1;
+package dev.ua.uaproject.catwalk.api.v1;
 
 import io.javalin.http.BadRequestResponse;
 import io.javalin.http.Context;
 import io.javalin.http.InternalServerErrorResponse;
 import io.javalin.openapi.*;
-import io.servertap.Constants;
-import io.servertap.ServerTapMain;
-import io.servertap.api.v1.models.Plugin;
+import dev.ua.uaproject.catwalk.Constants;
+import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.api.v1.models.Plugin;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.bukkit.Bukkit;
@@ -20,9 +20,9 @@ import java.util.logging.Logger;
 
 public class PluginApi {
     private final Logger log;
-    private final ServerTapMain main;
+    private final CatWalkMain main;
 
-    public PluginApi(ServerTapMain main, Logger log) {
+    public PluginApi(CatWalkMain main, Logger log) {
         this.log = log;
         this.main = main;
     }
@@ -44,7 +44,7 @@ public class PluginApi {
         ArrayList<Plugin> pluginList = new ArrayList<>();
         for (org.bukkit.plugin.Plugin plugin : Bukkit.getPluginManager().getPlugins()) {
 
-            io.servertap.api.v1.models.Plugin pl = new io.servertap.api.v1.models.Plugin();
+            Plugin pl = new Plugin();
             pl.setName(plugin.getName());
             pl.setEnabled(plugin.isEnabled());
             pl.setVersion(plugin.getDescription().getVersion());
@@ -102,10 +102,10 @@ public class PluginApi {
 
         // Validate the storage area
         if (!holdingArea.exists()) {
-            log.info("[ServerTap] Plugin downloads directory doesn't exist, trying to create");
+            log.info("[CatWalk] Plugin downloads directory doesn't exist, trying to create");
 
             if (!holdingArea.mkdir()) {
-                log.severe("[ServerTap] Could not create downloads directory!");
+                log.severe("[CatWalk] Could not create downloads directory!");
                 throw new InternalServerErrorResponse("Could not create downloads directory!");
             }
         }
@@ -119,7 +119,7 @@ public class PluginApi {
                 long elapsed = System.currentTimeMillis() - startTime;
 
                 String msg = String.format("Downloaded plugin in %.2f seconds", elapsed / 1000.0);
-                log.info("[ServerTap]" + msg);
+                log.info("[CatWalk]" + msg);
 
                 String targetFilename = main.getDataFolder().getAbsoluteFile().getParent() + File.separator + FilenameUtils.getName(url.getPath());
                 boolean success = downloadedFile.renameTo(new File(targetFilename));

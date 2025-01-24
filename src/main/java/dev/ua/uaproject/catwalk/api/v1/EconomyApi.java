@@ -1,12 +1,12 @@
-package io.servertap.api.v1;
+package dev.ua.uaproject.catwalk.api.v1;
 
 import io.javalin.http.BadRequestResponse;
 import io.javalin.http.Context;
 import io.javalin.http.HttpResponseException;
 import io.javalin.http.InternalServerErrorResponse;
 import io.javalin.openapi.*;
-import io.servertap.Constants;
-import io.servertap.utils.pluginwrappers.EconomyWrapper;
+import dev.ua.uaproject.catwalk.Constants;
+import dev.ua.uaproject.catwalk.utils.pluginwrappers.EconomyWrapper;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.Bukkit;
@@ -54,7 +54,7 @@ public class EconomyApi {
             econPlugin = rsp.getPlugin();
         }
 
-        io.servertap.api.v1.models.Plugin plugin = new io.servertap.api.v1.models.Plugin();
+        dev.ua.uaproject.catwalk.api.v1.models.Plugin plugin = new dev.ua.uaproject.catwalk.api.v1.models.Plugin();
         plugin.setName(econPlugin.getName());
         plugin.setEnabled(econPlugin.isEnabled());
         plugin.setVersion(econPlugin.getDescription().getVersion());

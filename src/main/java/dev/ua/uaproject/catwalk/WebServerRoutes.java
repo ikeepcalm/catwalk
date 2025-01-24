@@ -1,13 +1,13 @@
-package io.servertap;
+package dev.ua.uaproject.catwalk;
 
+import dev.ua.uaproject.catwalk.api.v1.ApiV1Initializer;
 import io.javalin.http.Handler;
 import io.javalin.websocket.WsConfig;
-import io.servertap.api.v1.*;
-import io.servertap.utils.ConsoleListener;
-import io.servertap.utils.LagDetector;
-import io.servertap.utils.pluginwrappers.ExternalPluginWrapperRepo;
+import dev.ua.uaproject.catwalk.utils.ConsoleListener;
+import dev.ua.uaproject.catwalk.utils.LagDetector;
+import dev.ua.uaproject.catwalk.utils.pluginwrappers.ExternalPluginWrapperRepo;
 
-import static io.servertap.Constants.*;
+import static dev.ua.uaproject.catwalk.Constants.*;
 
 import java.util.function.Consumer;
 import java.util.logging.Logger;
@@ -16,7 +16,7 @@ public final class WebServerRoutes {
 
     private WebServerRoutes() {}
 
-    public static void addV1Routes(ServerTapMain main, Logger log, LagDetector lagDetector, WebServer webServer,
+    public static void addV1Routes(CatWalkMain main, Logger log, LagDetector lagDetector, WebServer webServer,
                                    ConsoleListener consoleListener, ExternalPluginWrapperRepo externalPluginWrapperRepo) {
         PrefixedRouteBuilder pr = new PrefixedRouteBuilder(API_V1, webServer);
 

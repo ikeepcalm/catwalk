@@ -1,11 +1,11 @@
-package io.servertap.api.v1;
+package dev.ua.uaproject.catwalk.api.v1;
 
 import io.javalin.http.Context;
 import io.javalin.openapi.OpenApi;
 import io.javalin.openapi.OpenApiContent;
 import io.javalin.openapi.OpenApiParam;
 import io.javalin.openapi.OpenApiResponse;
-import io.servertap.api.v1.models.Advancement;
+import dev.ua.uaproject.catwalk.api.v1.models.Advancement;
 import org.bukkit.Bukkit;
 
 import java.util.ArrayList;

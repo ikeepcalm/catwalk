@@ -1,18 +1,18 @@
-package io.servertap.api.v1;
+package dev.ua.uaproject.catwalk.api.v1;
 
+import dev.ua.uaproject.catwalk.api.v1.models.*;
 import io.javalin.http.BadRequestResponse;
 import io.javalin.http.Context;
 import io.javalin.http.NotFoundResponse;
 import io.javalin.http.ServiceUnavailableResponse;
 import io.javalin.openapi.*;
-import io.servertap.Constants;
-import io.servertap.ServerTapMain;
-import io.servertap.utils.LagDetector;
-import io.servertap.utils.ServerExecCommandSender;
-import io.servertap.api.v1.models.*;
-import io.servertap.mojang.api.MojangApiService;
-import io.servertap.utils.pluginwrappers.EconomyWrapper;
-import io.servertap.utils.GsonSingleton;
+import dev.ua.uaproject.catwalk.Constants;
+import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.utils.LagDetector;
+import dev.ua.uaproject.catwalk.utils.ServerExecCommandSender;
+import dev.ua.uaproject.catwalk.mojang.api.MojangApiService;
+import dev.ua.uaproject.catwalk.utils.pluginwrappers.EconomyWrapper;
+import dev.ua.uaproject.catwalk.utils.GsonSingleton;
 import org.apache.commons.lang3.StringUtils;
 import org.bukkit.BanList;
 import org.bukkit.Bukkit;
@@ -32,13 +32,13 @@ import java.util.logging.Logger;
 
 public class ServerApi {
     private final Logger log;
-    private final ServerTapMain main;
+    private final CatWalkMain main;
     private final EconomyWrapper economy;
     private final org.bukkit.Server bukkitServer = Bukkit.getServer();
     private ScoreboardManager scoreboardManager;
     private final LagDetector lagDetector;
 
-    public ServerApi(ServerTapMain main, Logger log, LagDetector lagDetector, EconomyWrapper economy) {
+    public ServerApi(CatWalkMain main, Logger log, LagDetector lagDetector, EconomyWrapper economy) {
         this.log = log;
         this.main = main;
         this.economy = economy;
@@ -546,19 +546,19 @@ public class ServerApi {
                     @OpenApiResponse(
                             status = "200",
                             content = @OpenApiContent(
-                                    from = io.servertap.api.v1.models.OfflinePlayer.class
+                                    from = dev.ua.uaproject.catwalk.api.v1.models.OfflinePlayer.class
                             )
                     )
             }
     )
     public void getOps(Context ctx) {
         Set<org.bukkit.OfflinePlayer> players = Bukkit.getOperators();
-        ArrayList<io.servertap.api.v1.models.OfflinePlayer> opedPlayers = new ArrayList<>();
+        ArrayList<dev.ua.uaproject.catwalk.api.v1.models.OfflinePlayer> opedPlayers = new ArrayList<>();
         for (org.bukkit.OfflinePlayer player : players) {
             if (!player.isOp()) {
                 continue;
             }
-            io.servertap.api.v1.models.OfflinePlayer p = new io.servertap.api.v1.models.OfflinePlayer();
+            dev.ua.uaproject.catwalk.api.v1.models.OfflinePlayer p = new dev.ua.uaproject.catwalk.api.v1.models.OfflinePlayer();
             p.setDisplayName(player.getName());
             p.setUuid(player.getUniqueId().toString());
             p.setWhitelisted(player.isWhitelisted());

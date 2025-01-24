@@ -1,4 +1,4 @@
-package io.servertap.api.v1;
+package dev.ua.uaproject.catwalk.api.v1;
 
 import java.util.UUID;
 

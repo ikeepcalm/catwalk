@@ -1,12 +1,12 @@
-package io.servertap.webhooks;
+package dev.ua.uaproject.catwalk.webhooks;
 
 import com.google.gson.Gson;
-import io.servertap.ServerTapMain;
-import io.servertap.api.v1.models.ItemStack;
-import io.servertap.api.v1.models.Player;
-import io.servertap.utils.pluginwrappers.EconomyWrapper;
-import io.servertap.utils.GsonSingleton;
-import io.servertap.utils.pluginwrappers.ExternalPluginWrapperRepo;
+import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.api.v1.models.ItemStack;
+import dev.ua.uaproject.catwalk.api.v1.models.Player;
+import dev.ua.uaproject.catwalk.utils.pluginwrappers.EconomyWrapper;
+import dev.ua.uaproject.catwalk.utils.GsonSingleton;
+import dev.ua.uaproject.catwalk.webhooks.models.events.*;
 import io.servertap.webhooks.models.events.*;
 import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
@@ -34,11 +34,11 @@ import java.util.logging.Logger;
 
 public class WebhookEventListener implements Listener {
     private final Logger log;
-    private final ServerTapMain main;
+    private final CatWalkMain main;
     private final EconomyWrapper economyWrapper;
     private List<Webhook> webhooks;
 
-    public WebhookEventListener(ServerTapMain main, FileConfiguration bukkitConfig, Logger logger, EconomyWrapper economyWrapper) {
+    public WebhookEventListener(CatWalkMain main, FileConfiguration bukkitConfig, Logger logger, EconomyWrapper economyWrapper) {
         this.main = main;
         this.log = logger;
         this.economyWrapper = economyWrapper;

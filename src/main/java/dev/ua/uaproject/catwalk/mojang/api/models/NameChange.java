@@ -1,4 +1,4 @@
-package io.servertap.mojang.api.models;
+package dev.ua.uaproject.catwalk.mojang.api.models;
 
 public class NameChange {
     private String name;

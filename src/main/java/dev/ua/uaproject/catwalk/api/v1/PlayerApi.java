@@ -1,12 +1,12 @@
-package io.servertap.api.v1;
+package dev.ua.uaproject.catwalk.api.v1;
 
 import de.tr7zw.nbtapi.NBTFile;
 import io.javalin.http.*;
 import io.javalin.openapi.*;
-import io.servertap.Constants;
-import io.servertap.api.v1.models.ItemStack;
-import io.servertap.api.v1.models.Player;
-import io.servertap.utils.pluginwrappers.EconomyWrapper;
+import dev.ua.uaproject.catwalk.Constants;
+import dev.ua.uaproject.catwalk.api.v1.models.ItemStack;
+import dev.ua.uaproject.catwalk.api.v1.models.Player;
+import dev.ua.uaproject.catwalk.utils.pluginwrappers.EconomyWrapper;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
@@ -79,10 +79,10 @@ public class PlayerApi {
     }
 
     /**
-     * Internal method to convert a Bukkit player into a ServerTap player
+     * Internal method to convert a Bukkit player into a CatWalk player
      *
      * @param player The Bukkit player
-     * @return The ServerTap player
+     * @return The CatWalk player
      */
     private Player getPlayer(org.bukkit.entity.Player player) {
         Player p = new Player();
@@ -133,17 +133,17 @@ public class PlayerApi {
                     @OpenApiParam(name = "key")
             },
             responses = {
-                    @OpenApiResponse(status = "200", content = @OpenApiContent(from = io.servertap.api.v1.models.OfflinePlayer.class))
+                    @OpenApiResponse(status = "200", content = @OpenApiContent(from = dev.ua.uaproject.catwalk.api.v1.models.OfflinePlayer.class))
             }
     )
     public void offlinePlayersGet(Context ctx) {
 
-        ArrayList<io.servertap.api.v1.models.OfflinePlayer> players = new ArrayList<>();
+        ArrayList<dev.ua.uaproject.catwalk.api.v1.models.OfflinePlayer> players = new ArrayList<>();
 
         OfflinePlayer[] offlinePlayers = Bukkit.getOfflinePlayers();
 
         for (OfflinePlayer offlinePlayer : offlinePlayers) {
-            io.servertap.api.v1.models.OfflinePlayer p = new io.servertap.api.v1.models.OfflinePlayer();
+            dev.ua.uaproject.catwalk.api.v1.models.OfflinePlayer p = new dev.ua.uaproject.catwalk.api.v1.models.OfflinePlayer();
 
             p.setDisplayName(offlinePlayer.getName());
             p.setUuid(offlinePlayer.getUniqueId().toString());
@@ -176,7 +176,7 @@ public class PlayerApi {
                     @OpenApiParam(name = "worldUuid", description = "UUID of the world")
             },
             responses = {
-                    @OpenApiResponse(status = "200", content = @OpenApiContent(from = io.servertap.api.v1.models.ItemStack.class))
+                    @OpenApiResponse(status = "200", content = @OpenApiContent(from = ItemStack.class))
             }
     )
     public void getPlayerInv(Context ctx) {

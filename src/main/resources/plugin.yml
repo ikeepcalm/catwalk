@@ -1,15 +1,14 @@
-name: ServerTap
-main: io.servertap.ServerTapMain
+name: CatWalk
+main: dev.ua.uaproject.catwalk.CatWalkMain
 version: 0.6.2-SNAPSHOT
-description: ServerTap is a REST API for Bukkit/Spigot/PaperMC Minecraft servers.
-authors: [phybros, ATechAdventurer, c1oneman, Earlh21, Scarsz, au5ton, Aberdeener, Hedlund01, matteoturini, Diddyy, Velyn-N, srmullaney, TimeCoding]
+description: CatWalk is a REST API for Minecraft servers. Originally based on CatWalk but now completely redesigned by THEROER.
+authors: [THEROER (CatWalk Rework), phybros (CatWalk Original), ATechAdventurer (CatWalk Original), c1oneman (CatWalk Original), Earlh21 (CatWalk Original), Scarsz (CatWalk Original), au5ton (CatWalk Original), Aberdeener (CatWalk Original), Hedlund01 (CatWalk Original), matteoturini (CatWalk Original), Diddyy (CatWalk Original), Velyn-N (CatWalk Original), srmullaney (CatWalk Original), TimeCoding (CatWalk Original)]
 load: STARTUP
-website: https://servertap.io
 api-version: 1.16
 softdepend:
   - Vault
   - PlaceholderAPI
 commands:
-  servertap:
-    description: ServerTap Management Command
-    permission: servertap.admin
+  catwalk:
+    description: CatWalk Management Command
+    permission: catwalk.admin

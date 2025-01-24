@@ -10,11 +10,11 @@ import java.util.List;
 
 import static org.bukkit.ChatColor.*;
 
-public class ServerTapCommand implements CommandExecutor, TabCompleter {
+public class CatWalkCommand implements CommandExecutor, TabCompleter {
 
     private final CatWalkMain main;
 
-    public ServerTapCommand(CatWalkMain main) {
+    public CatWalkCommand(CatWalkMain main) {
         this.main = main;
 
         PluginCommand pluginCommand = main.getCommand("servertap");
@@ -27,7 +27,7 @@ public class ServerTapCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
         if (!commandSender.hasPermission("servertap.admin")) {
-            commandSender.sendMessage(String.format("%s[%sServerTap%s] %sYou do not have the permission to do that!", DARK_GRAY, BLUE, DARK_GRAY, AQUA));
+            commandSender.sendMessage(String.format("%s[%sCatWalk%s] %sYou do not have the permission to do that!", DARK_GRAY, BLUE, DARK_GRAY, AQUA));
             return false;
         }
 
@@ -35,17 +35,17 @@ public class ServerTapCommand implements CommandExecutor, TabCompleter {
             switch (args[0]) {
                 case "reload":
                     main.reload();
-                    commandSender.sendMessage(String.format("%s[%sServerTap%s] %sServerTap reloaded!", DARK_GRAY, BLUE, DARK_GRAY, AQUA));
+                    commandSender.sendMessage(String.format("%s[%sCatWalk%s] %sCatWalk reloaded!", DARK_GRAY, BLUE, DARK_GRAY, AQUA));
                     break;
                 case "info":
                     String version = main.getDescription().getVersion();
                     String website = main.getDescription().getWebsite();
                     String authors = String.join(", ", main.getDescription().getAuthors());
-                    commandSender.sendMessage(String.format("%sServerTap Plugin Information:\n%sVersion: %s%s\n%sWebsite: %s%s\n%sAuthors: %s%s",
+                    commandSender.sendMessage(String.format("%sCatWalk Plugin Information:\n%sVersion: %s%s\n%sWebsite: %s%s\n%sAuthors: %s%s",
                             BLUE, BLUE, AQUA, version, BLUE, AQUA, website, BLUE, AQUA, authors));
                     break;
                 default:
-                    commandSender.sendMessage(String.format("%s[%sServerTap%s] %sUnknown Command.", DARK_GRAY, BLUE, DARK_GRAY, AQUA));
+                    commandSender.sendMessage(String.format("%s[%sCatWalk%s] %sUnknown Command.", DARK_GRAY, BLUE, DARK_GRAY, AQUA));
                     return false;
             }
             return true;

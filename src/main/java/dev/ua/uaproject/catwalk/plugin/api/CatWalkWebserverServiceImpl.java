@@ -1,18 +1,18 @@
-package io.servertap.plugin.api;
+package dev.ua.uaproject.catwalk.plugin.api;
 
 import io.javalin.Javalin;
 import io.javalin.http.Handler;
 import io.javalin.websocket.WsConfig;
-import io.servertap.ServerTapMain;
-import io.servertap.WebServer;
+import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.WebServer;
 
 import java.util.function.Consumer;
 
-public class ServerTapWebserverServiceImpl implements ServerTapWebserverService {
+public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
 
     private final WebServer webServer;
 
-    public ServerTapWebserverServiceImpl(ServerTapMain main) {
+    public CatWalkWebserverServiceImpl(CatWalkMain main) {
         this.webServer = main.getWebServer();
     }
 

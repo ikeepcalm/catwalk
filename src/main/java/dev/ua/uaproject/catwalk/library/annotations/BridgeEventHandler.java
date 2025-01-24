@@ -1,4 +1,9 @@
 package dev.ua.uaproject.catwalk.library.annotations;
 
-public class BridgeEventHandler {
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
+@Retention(RetentionPolicy.RUNTIME)
+public @interface BridgeEventHandler {
+    String[] scopes() default {};
 }

@@ -1,4 +1,4 @@
-package io.servertap.metrics;
+package dev.ua.uaproject.catwalk.metrics;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;

@@ -1,12 +1,12 @@
-package io.servertap.api.v1;
+package dev.ua.uaproject.catwalk.api.v1;
 
 import io.javalin.http.BadRequestResponse;
 import io.javalin.http.Context;
 import io.javalin.http.NotFoundResponse;
 import io.javalin.openapi.*;
-import io.servertap.Constants;
-import io.servertap.ServerTapMain;
-import io.servertap.api.v1.models.World;
+import dev.ua.uaproject.catwalk.Constants;
+import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.api.v1.models.World;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.io.IOUtils;
@@ -23,10 +23,10 @@ import java.util.logging.Logger;
 
 public class WorldApi {
     private final Logger log;
-    private final ServerTapMain main;
+    private final CatWalkMain main;
     private final org.bukkit.Server bukkitServer = Bukkit.getServer();
 
-    public WorldApi(ServerTapMain main, Logger log) {
+    public WorldApi(CatWalkMain main, Logger log) {
         this.log = log;
         this.main = main;
     }

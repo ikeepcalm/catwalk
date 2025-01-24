@@ -1,4 +1,4 @@
-package io.servertap.plugin.api;
+package dev.ua.uaproject.catwalk.plugin.api;
 
 import io.javalin.Javalin;
 import io.javalin.http.Handler;
@@ -7,13 +7,13 @@ import io.javalin.websocket.WsConfig;
 import java.util.function.Consumer;
 
 /**
- * API for the ServerTap Webserver.
+ * API for the CatWalk Webserver.
  */
-public interface ServerTapWebserverService {
+public interface CatWalkWebserverService {
 
     /**
      * Get the Javalin Webserver Instance.<br>
-     * Use with caution, as this gives full access to the Webserver and might break ServerTaps functionality.
+     * Use with caution, as this gives full access to the Webserver and might break CatWalks functionality.
      *
      * @return the Javalin Webserver Instance
      */

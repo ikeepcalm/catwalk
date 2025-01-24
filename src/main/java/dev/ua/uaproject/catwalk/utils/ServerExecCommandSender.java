@@ -1,14 +1,13 @@
-package io.servertap.utils;
+package dev.ua.uaproject.catwalk.utils;
 
-import io.servertap.Constants;
-import io.servertap.ServerTapMain;
+import dev.ua.uaproject.catwalk.Constants;
+import dev.ua.uaproject.catwalk.CatWalkMain;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Server;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
-import org.bukkit.command.RemoteConsoleCommandSender;
 import org.bukkit.conversations.Conversation;
 import org.bukkit.conversations.ConversationAbandonedEvent;
 import org.bukkit.permissions.Permission;
@@ -18,11 +17,7 @@ import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -34,10 +29,10 @@ public class ServerExecCommandSender implements ConsoleCommandSender {
     private static final ScheduledThreadPoolExecutor EXECUTOR = new ScheduledThreadPoolExecutor(1);
     private static final ConsoleCommandSender CONSOLE_COMMAND_SENDER = Bukkit.getConsoleSender();
 
-    private final ServerTapMain main;
+    private final CatWalkMain main;
     private final List<String> messageBuffer = new ArrayList<>();
 
-    public ServerExecCommandSender(ServerTapMain main) {
+    public ServerExecCommandSender(CatWalkMain main) {
         this.main = main;
     }
 
