@@ -17,7 +17,7 @@ public class CatWalkCommand implements CommandExecutor, TabCompleter {
     public CatWalkCommand(CatWalkMain main) {
         this.main = main;
 
-        PluginCommand pluginCommand = main.getCommand("servertap");
+        PluginCommand pluginCommand = main.getCommand("catwalk");
         if (pluginCommand != null) {
             pluginCommand.setTabCompleter(this);
             pluginCommand.setExecutor(this);
@@ -26,7 +26,7 @@ public class CatWalkCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
-        if (!commandSender.hasPermission("servertap.admin")) {
+        if (!commandSender.hasPermission("catwalk.admin")) {
             commandSender.sendMessage(String.format("%s[%sCatWalk%s] %sYou do not have the permission to do that!", DARK_GRAY, BLUE, DARK_GRAY, AQUA));
             return false;
         }
@@ -56,7 +56,7 @@ public class CatWalkCommand implements CommandExecutor, TabCompleter {
     @Override
     @Nullable
     public List<String> onTabComplete(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
-        if (!commandSender.hasPermission("servertap.admin")) {
+        if (!commandSender.hasPermission("catwalk.admin")) {
             return null;
         }
         ArrayList<String> completions = new ArrayList<>();

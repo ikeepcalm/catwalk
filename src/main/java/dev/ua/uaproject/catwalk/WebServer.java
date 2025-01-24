@@ -25,7 +25,7 @@ import java.util.logging.Logger;
 public class WebServer {
 
     public static final String SERVERTAP_KEY_HEADER = "key";
-    public static final String SERVERTAP_KEY_COOKIE = "x-servertap-key";
+    public static final String SERVERTAP_KEY_COOKIE = "x-catwalk-key";
     private static final String[] noAuthPaths = new String[]{"/swagger", "/swagger-docs", "/webjars"};
 
     private final Logger log;

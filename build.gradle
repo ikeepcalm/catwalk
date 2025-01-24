@@ -1,9 +1,11 @@
 plugins {
     id 'java'
+    id 'maven-publish'
+    id 'com.gradleup.shadow' version '9.0.0-beta6'
 }
 
 group = 'dev.ua.uaproject.catwalk'
-version = '1.0-SNAPSHOT'
+version = '1.5-SNAPSHOT'
 
 repositories {
     mavenCentral()
@@ -45,10 +47,18 @@ dependencies {
     testImplementation("com.github.seeseemelk:MockBukkit-v1.18:2.85.2")
     testImplementation("com.konghq:unirest-java:3.14.5:standalone")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.3")
-    compileOnly("io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
     compileOnly("net.milkbowl.vault:VaultAPI:1.7")
     compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
     compileOnly("me.clip:placeholderapi:2.11.6")
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+        }
+    }
 }
 
 def targetJavaVersion = 21

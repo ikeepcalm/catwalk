@@ -1,57 +1,65 @@
 package dev.ua.uaproject.catwalk.library;
 
-import dev.ua.uaproject.catwalk.library.annotations.BridgeEventHandler;
-import io.javalin.Javalin;
-import io.javalin.http.HandlerType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.WebServer;
+import io.javalin.http.Context;
 import io.javalin.openapi.HttpMethod;
 import io.javalin.openapi.OpenApi;
 import org.slf4j.Logger;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 public class BridgeEventHandlerProcessor {
 
     private final Logger logger;
-    private final Javalin javalin;
 
-    public BridgeEventHandlerProcessor(Logger logger, Javalin javalin) {
+    public BridgeEventHandlerProcessor(Logger logger) {
         this.logger = logger;
-        this.javalin = javalin;
     }
 
-    public void registerHandlers(Object handlerInstance) {
+    public void registerHandler(Object handlerInstance) {
         Class<?> clazz = handlerInstance.getClass();
         for (Method method : clazz.getDeclaredMethods()) {
             OpenApi openApiAnnotation = method.getAnnotation(OpenApi.class);
-            BridgeEventHandler bridgeEventHandlerAnnotation = method.getAnnotation(BridgeEventHandler.class);
+            if (openApiAnnotation == null) continue;
 
-            if (openApiAnnotation == null) {
-                if (bridgeEventHandlerAnnotation != null) {
-                    logger.warn("Bridge event handler annotation found but OpenApi is missing.");
-                }
-                continue;
-            }
+            WebServer webServer = CatWalkMain.instance.getWebServer();
 
             for (HttpMethod httpMethod : openApiAnnotation.methods()) {
-                try {
-                    HandlerType handlerType = HandlerType.valueOf(httpMethod.name());
-                    if (handlerType.isHttpMethod()) {
-                        javalin.addHandler(handlerType, openApiAnnotation.path(), context -> {
-                            try {
-                                method.invoke(handlerInstance, context, httpMethod);
-                            } catch (IllegalAccessException | InvocationTargetException e) {
-                                logger.error("Failed to invoke handler method: {}", method.getName(), e);
-                            }
-                        });
-                    } else {
-                        logger.warn("Unsupported HTTP method: {}", httpMethod.name());
-                    }
-                } catch (IllegalArgumentException e) {
-                    logger.error("Invalid HTTP method: {}", httpMethod.name(), e);
+                switch (httpMethod.name()) {
+                    case "POST" -> webServer.post(openApiAnnotation.path(), context -> {
+                        try {
+                            Class<?> paramType = getMethodParamType(method);
+                            Object param = deserializeRequestBody(context, paramType);
+                            method.invoke(handlerInstance, param);
+                        } catch (Exception e) {
+                            logger.error("Failed to invoke handler method: {}", method.getName(), e);
+                        }
+                    });
+                    case "GET" -> webServer.get(openApiAnnotation.path(), context -> {
+                        try {
+                            method.invoke(handlerInstance);
+                        } catch (Exception e) {
+                            logger.error("Failed to invoke handler method: {}", method.getName(), e);
+                        }
+                    });
                 }
             }
         }
+    }
+
+
+    private Class<?> getMethodParamType(Method method) {
+        if (method.getParameterCount() != 1) {
+            throw new IllegalArgumentException("Method must have exactly one parameter: " + method.getName());
+        }
+        return method.getParameterTypes()[0];
+    }
+
+    private Object deserializeRequestBody(Context context, Class<?> paramType) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(context.body(), paramType);
     }
 
 }

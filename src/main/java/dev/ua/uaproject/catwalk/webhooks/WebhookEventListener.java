@@ -7,7 +7,6 @@ import dev.ua.uaproject.catwalk.api.v1.models.Player;
 import dev.ua.uaproject.catwalk.utils.pluginwrappers.EconomyWrapper;
 import dev.ua.uaproject.catwalk.utils.GsonSingleton;
 import dev.ua.uaproject.catwalk.webhooks.models.events.*;
-import io.servertap.webhooks.models.events.*;
 import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
