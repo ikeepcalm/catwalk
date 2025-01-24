@@ -13,7 +13,7 @@ import io.servertap.api.v1.models.*;
 import io.servertap.mojang.api.MojangApiService;
 import io.servertap.utils.pluginwrappers.EconomyWrapper;
 import io.servertap.utils.GsonSingleton;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.bukkit.BanList;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
@@ -44,9 +44,7 @@ public class ServerApi {
         this.economy = economy;
         this.lagDetector = lagDetector;
 
-        Bukkit.getScheduler().runTask(main, () -> {
-            scoreboardManager = Bukkit.getScoreboardManager();
-        });
+        Bukkit.getScheduler().runTask(main, () -> scoreboardManager = Bukkit.getScoreboardManager());
     }
 
     @OpenApi(
@@ -96,7 +94,7 @@ public class ServerApi {
             ban.setSource(banEntry.getSource());
             ban.setExpiration(banEntry.getExpiration());
             ban.setReason(ban.getReason());
-            ban.setTarget(banEntry.getTarget());
+            ban.setTarget(banEntry.getBanTarget().toString());
 
             bannedIps.add(ban);
         });

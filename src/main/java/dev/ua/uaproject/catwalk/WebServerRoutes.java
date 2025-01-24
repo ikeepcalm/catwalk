@@ -36,10 +36,8 @@ public final class WebServerRoutes {
 
         pr.get("worlds", api.getWorldApi()::worldsGet);
         pr.post("worlds/save", api.getWorldApi()::saveAllWorlds);
-        pr.get("worlds/download", api.getWorldApi()::downloadWorlds);
         pr.get("worlds/{uuid}", api.getWorldApi()::worldGet);
         pr.post("worlds/{uuid}/save", api.getWorldApi()::saveWorld);
-        pr.get("worlds/{uuid}/download", api.getWorldApi()::downloadWorld);
 
         pr.get("scoreboard", api.getServerApi()::scoreboardGet);
         pr.get("scoreboard/{name}", api.getServerApi()::objectiveGet);

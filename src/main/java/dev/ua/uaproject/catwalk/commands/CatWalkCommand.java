@@ -1,6 +1,6 @@
-package io.servertap.commands;
+package dev.ua.uaproject.catwalk.commands;
 
-import io.servertap.ServerTapMain;
+import dev.ua.uaproject.catwalk.CatWalkMain;
 import org.bukkit.command.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -12,9 +12,9 @@ import static org.bukkit.ChatColor.*;
 
 public class ServerTapCommand implements CommandExecutor, TabCompleter {
 
-    private final ServerTapMain main;
+    private final CatWalkMain main;
 
-    public ServerTapCommand(ServerTapMain main) {
+    public ServerTapCommand(CatWalkMain main) {
         this.main = main;
 
         PluginCommand pluginCommand = main.getCommand("servertap");

@@ -1,26 +1,23 @@
-package io.servertap;
+package dev.ua.uaproject.catwalk;
 
-import io.servertap.api.v1.models.ConsoleLine;
-import io.servertap.commands.ServerTapCommand;
-import io.servertap.metrics.Metrics;
-import io.servertap.plugin.api.ServerTapWebserverService;
-import io.servertap.plugin.api.ServerTapWebserverServiceImpl;
-import io.servertap.utils.ConsoleListener;
-import io.servertap.utils.LagDetector;
-import io.servertap.utils.pluginwrappers.ExternalPluginWrapperRepo;
-import io.servertap.webhooks.WebhookEventListener;
+import io.papermc.paper.plugin.configuration.PluginMeta;
+import dev.ua.uaproject.catwalk.api.v1.models.ConsoleLine;
+import dev.ua.uaproject.catwalk.commands.ServerTapCommand;
+import dev.ua.uaproject.catwalk.metrics.Metrics;
+import dev.ua.uaproject.catwalk.plugin.api.ServerTapWebserverService;
+import dev.ua.uaproject.catwalk.plugin.api.ServerTapWebserverServiceImpl;
+import dev.ua.uaproject.catwalk.utils.ConsoleListener;
+import dev.ua.uaproject.catwalk.utils.LagDetector;
+import dev.ua.uaproject.catwalk.utils.pluginwrappers.ExternalPluginWrapperRepo;
+import dev.ua.uaproject.catwalk.webhooks.WebhookEventListener;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.Logger;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.plugin.java.JavaPluginLoader;
-import org.jetbrains.annotations.NotNull;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,13 +37,6 @@ public class ServerTapMain extends JavaPlugin {
 
     public ServerTapMain() {
         super();
-        instance = this;
-        server = getServer();
-        lagDetector = new LagDetector();
-    }
-
-    public ServerTapMain(@NotNull JavaPluginLoader loader, @NotNull PluginDescriptionFile description, @NotNull File dataFolder, @NotNull File file) {
-        super(loader, description, dataFolder, file);
         instance = this;
         server = getServer();
         lagDetector = new LagDetector();
@@ -107,7 +97,9 @@ public class ServerTapMain extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        log.info(String.format("[%s] Disabled Version %s", getDescription().getName(), getDescription().getVersion()));
+        PluginMeta pluginMeta = getPluginMeta();
+
+        log.info(String.format("[%s] Disabled Version %s", pluginMeta.getDescription(), pluginMeta.getVersion()));
         if (app != null) {
             app.stop();
         }
