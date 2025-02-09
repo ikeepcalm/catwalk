@@ -11,7 +11,6 @@ import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.utils.LagDetector;
 import dev.ua.uaproject.catwalk.utils.ServerExecCommandSender;
 import dev.ua.uaproject.catwalk.mojang.api.MojangApiService;
-import dev.ua.uaproject.catwalk.utils.pluginwrappers.EconomyWrapper;
 import dev.ua.uaproject.catwalk.utils.GsonSingleton;
 import org.apache.commons.lang3.StringUtils;
 import org.bukkit.BanList;
@@ -33,15 +32,13 @@ import java.util.logging.Logger;
 public class ServerApi {
     private final Logger log;
     private final CatWalkMain main;
-    private final EconomyWrapper economy;
     private final org.bukkit.Server bukkitServer = Bukkit.getServer();
     private ScoreboardManager scoreboardManager;
     private final LagDetector lagDetector;
 
-    public ServerApi(CatWalkMain main, Logger log, LagDetector lagDetector, EconomyWrapper economy) {
+    public ServerApi(CatWalkMain main, Logger log, LagDetector lagDetector) {
         this.log = log;
         this.main = main;
-        this.economy = economy;
         this.lagDetector = lagDetector;
 
         Bukkit.getScheduler().runTask(main, () -> scoreboardManager = Bukkit.getScoreboardManager());
@@ -564,10 +561,6 @@ public class ServerApi {
             p.setWhitelisted(player.isWhitelisted());
             p.setBanned(player.isBanned());
             p.setOp(player.isOp());
-
-            if (economy.isAvailable()) {
-                p.setBalance(economy.getPlayerBalance(player));
-            }
 
             opedPlayers.add(p);
 

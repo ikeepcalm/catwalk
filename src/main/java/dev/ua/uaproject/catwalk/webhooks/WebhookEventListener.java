@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.api.v1.models.ItemStack;
 import dev.ua.uaproject.catwalk.api.v1.models.Player;
-import dev.ua.uaproject.catwalk.utils.pluginwrappers.EconomyWrapper;
 import dev.ua.uaproject.catwalk.utils.GsonSingleton;
 import dev.ua.uaproject.catwalk.webhooks.models.events.*;
 import net.md_5.bungee.api.ChatColor;
@@ -34,13 +33,11 @@ import java.util.logging.Logger;
 public class WebhookEventListener implements Listener {
     private final Logger log;
     private final CatWalkMain main;
-    private final EconomyWrapper economyWrapper;
     private List<Webhook> webhooks;
 
-    public WebhookEventListener(CatWalkMain main, FileConfiguration bukkitConfig, Logger logger, EconomyWrapper economyWrapper) {
+    public WebhookEventListener(CatWalkMain main, FileConfiguration bukkitConfig, Logger logger) {
         this.main = main;
         this.log = logger;
-        this.economyWrapper = economyWrapper;
 
         loadWebhooksFromConfig(bukkitConfig);
     }
@@ -174,10 +171,6 @@ public class WebhookEventListener implements Listener {
 
     private Player fromBukkitPlayer(org.bukkit.entity.Player player) {
         Player p = new Player();
-
-        if (economyWrapper.isAvailable()) {
-            p.setBalance(economyWrapper.getPlayerBalance(player));
-        }
 
         p.setUuid(player.getUniqueId().toString());
         p.setDisplayName(player.getDisplayName());

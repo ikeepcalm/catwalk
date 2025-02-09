@@ -5,7 +5,6 @@ import io.javalin.http.Handler;
 import io.javalin.websocket.WsConfig;
 import dev.ua.uaproject.catwalk.utils.ConsoleListener;
 import dev.ua.uaproject.catwalk.utils.LagDetector;
-import dev.ua.uaproject.catwalk.utils.pluginwrappers.ExternalPluginWrapperRepo;
 
 import static dev.ua.uaproject.catwalk.Constants.*;
 
@@ -17,10 +16,10 @@ public final class WebServerRoutes {
     private WebServerRoutes() {}
 
     public static void addV1Routes(CatWalkMain main, Logger log, LagDetector lagDetector, WebServer webServer,
-                                   ConsoleListener consoleListener, ExternalPluginWrapperRepo externalPluginWrapperRepo) {
+                                   ConsoleListener consoleListener) {
         PrefixedRouteBuilder pr = new PrefixedRouteBuilder(API_V1, webServer);
 
-        ApiV1Initializer api = new ApiV1Initializer(main, log, lagDetector, consoleListener, externalPluginWrapperRepo);
+        ApiV1Initializer api = new ApiV1Initializer(main, log, lagDetector, consoleListener);
 
         pr.get("ping", api.getServerApi()::ping);
 
@@ -51,11 +50,6 @@ public final class WebServerRoutes {
         pr.get("players/all", api.getPlayerApi()::offlinePlayersGet);
         pr.get("players/{uuid}", api.getPlayerApi()::playerGet);
         pr.get("players/{playerUuid}/{worldUuid}/inventory", api.getPlayerApi()::getPlayerInv);
-
-        // Economy routes
-        pr.post("economy/pay", api.getEconomyApi()::playerPay);
-        pr.post("economy/debit", api.getEconomyApi()::playerDebit);
-        pr.get("economy", api.getEconomyApi()::getEconomyPluginInformation);
 
         // Plugin routes
         pr.get("plugins", api.getPluginApi()::listPlugins);

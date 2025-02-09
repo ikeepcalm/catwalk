@@ -25,7 +25,8 @@ public class BridgeEventHandlerProcessor {
             if (openApiAnnotation == null) continue;
 
             WebServer webServer = CatWalkMain.instance.getWebServer();
-
+            logger.info("Registering handler method: {}", method.getName());
+            logger.info("Path: {}", openApiAnnotation.path());
             for (HttpMethod httpMethod : openApiAnnotation.methods()) {
                 switch (httpMethod.name()) {
                     case "POST" -> webServer.post(openApiAnnotation.path(), context -> {

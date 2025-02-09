@@ -8,7 +8,6 @@ import dev.ua.uaproject.catwalk.plugin.api.CatWalkWebserverService;
 import dev.ua.uaproject.catwalk.plugin.api.CatWalkWebserverServiceImpl;
 import dev.ua.uaproject.catwalk.utils.ConsoleListener;
 import dev.ua.uaproject.catwalk.utils.LagDetector;
-import dev.ua.uaproject.catwalk.utils.pluginwrappers.ExternalPluginWrapperRepo;
 import dev.ua.uaproject.catwalk.webhooks.WebhookEventListener;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.Logger;
@@ -26,7 +25,6 @@ public class CatWalkMain extends JavaPlugin {
     private static final java.util.logging.Logger log = Bukkit.getLogger();
     private final Logger rootLogger = (Logger) LogManager.getRootLogger();
     private final List<ConsoleLine> consoleBuffer = new ArrayList<>();
-    private ExternalPluginWrapperRepo externalPluginWrapperRepo;
     private WebhookEventListener webhookEventListener;
     private int maxConsoleBufferSize = 1000;
     private ConsoleListener consoleListener;
@@ -47,9 +45,6 @@ public class CatWalkMain extends JavaPlugin {
         // Tell bStats what plugin this is
         new Metrics(this, 9492);
 
-        // Initialize any external plugin integrations
-        externalPluginWrapperRepo = new ExternalPluginWrapperRepo(this, log);
-
         // Start the TPS Counter with a 100 tick Delay every 1 tick
         Bukkit.getScheduler().runTaskTimer(this, lagDetector, 100, 1);
 
@@ -65,7 +60,7 @@ public class CatWalkMain extends JavaPlugin {
 
         new CatWalkCommand(this);
 
-        webhookEventListener = new WebhookEventListener(this, bukkitConfig, log, externalPluginWrapperRepo.getEconomyWrapper());
+        webhookEventListener = new WebhookEventListener(this, bukkitConfig, log);
         server.getPluginManager().registerEvents(webhookEventListener, this);
 
         server.getServicesManager().register(CatWalkWebserverService.class, new CatWalkWebserverServiceImpl(this), this, ServicePriority.Normal);
@@ -74,7 +69,7 @@ public class CatWalkMain extends JavaPlugin {
     private void setupWebServer(FileConfiguration bukkitConfig) {
         app = new WebServer(this, bukkitConfig, log);
         app.start(bukkitConfig.getInt("port", 4567));
-        WebServerRoutes.addV1Routes(this, log, lagDetector, app, consoleListener, externalPluginWrapperRepo);
+        WebServerRoutes.addV1Routes(this, log, lagDetector, app, consoleListener);
     }
 
     public void reload() {
@@ -86,7 +81,6 @@ public class CatWalkMain extends JavaPlugin {
         FileConfiguration bukkitConfig = getConfig();
         maxConsoleBufferSize = bukkitConfig.getInt("websocketConsoleBuffer");
 
-        externalPluginWrapperRepo = new ExternalPluginWrapperRepo(this, log);
         consoleListener.resetListeners();
 
         setupWebServer(bukkitConfig);

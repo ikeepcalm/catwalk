@@ -1,5 +1,6 @@
 package dev.ua.uaproject.catwalk;
 
+import dev.ua.uaproject.catwalk.utils.GsonJsonMapper;
 import io.javalin.Javalin;
 import io.javalin.community.ssl.SSLPlugin;
 import io.javalin.config.JavalinConfig;
@@ -12,7 +13,6 @@ import io.javalin.openapi.plugin.swagger.SwaggerConfiguration;
 import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 import io.javalin.security.RouteRole;
 import io.javalin.websocket.WsConfig;
-import dev.ua.uaproject.catwalk.utils.GsonJsonMapper;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.io.File;
@@ -24,7 +24,7 @@ import java.util.logging.Logger;
 
 public class WebServer {
 
-    public static final String SERVERTAP_KEY_HEADER = "key";
+    public static final String SERVERTAP_KEY_HEADER = "Bearer";
     public static final String SERVERTAP_KEY_COOKIE = "x-catwalk-key";
     private static final String[] noAuthPaths = new String[]{"/swagger", "/swagger-docs", "/webjars"};
 
@@ -45,7 +45,6 @@ public class WebServer {
 
     public WebServer(CatWalkMain main, FileConfiguration bukkitConfig, Logger logger) {
         this.log = logger;
-
         this.isDebug = bukkitConfig.getBoolean("debug", false);
         this.blockedPaths = bukkitConfig.getStringList("blocked-paths");
         this.isAuthEnabled = bukkitConfig.getBoolean("useKeyAuth", true);
@@ -91,6 +90,37 @@ public class WebServer {
     /**
      * Verifies the Path is a wagger call or has the correct authentication
      */
+//    private void manageAccess(Handler handler, Context ctx, Set<? extends RouteRole> routeRoles) throws Exception {
+//        // If auth is not enabled just serve it all
+//        if (!this.isAuthEnabled) {
+//            handler.handle(ctx);
+//            return;
+//        }
+//
+//        if (isNoAuthPath(ctx.req().getPathInfo())) {
+//            handler.handle(ctx);
+//            return;
+//        }
+//
+//        // Auth is turned on, make sure there is a header called "Bearer"
+//        String authHeader = ctx.header(SERVERTAP_KEY_HEADER);
+//        if (authHeader != null && Objects.equals(authHeader, authKey)) {
+//            handler.handle(ctx);
+//            return;
+//        } else {
+//            log.warning("[CatWalk] Unauthorized request: " + ctx.req().getPathInfo());
+//        }
+//
+//        // If the request is still not handled, check for a cookie (websockets use cookies for auth)
+//        String authCookie = ctx.cookie(SERVERTAP_KEY_COOKIE);
+//        if (authCookie != null && Objects.equals(authCookie, authKey)) {
+//            handler.handle(ctx);
+//            return;
+//        }
+//
+//        // fall through, failsafe
+//        ctx.status(401).json(Map.of("error", "Unauthorized"));
+//    }
     private void manageAccess(Handler handler, Context ctx, Set<? extends RouteRole> routeRoles) throws Exception {
         // If auth is not enabled just serve it all
         if (!this.isAuthEnabled) {
@@ -103,11 +133,17 @@ public class WebServer {
             return;
         }
 
-        // Auth is turned on, make sure there is a header called "key"
-        String authHeader = ctx.header(SERVERTAP_KEY_HEADER);
-        if (authHeader != null && Objects.equals(authHeader, authKey)) {
-            handler.handle(ctx);
-            return;
+        String authHeader = ctx.header("Authorization");
+        log.info(authHeader);
+        log.info(String.valueOf(ctx.headerMap()));
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            if (Objects.equals(token, authKey)) {
+                handler.handle(ctx);
+                return;
+            }
+        } else {
+            log.warning("[CatWalk] Unauthorized request: " + ctx.req().getPathInfo());
         }
 
         // If the request is still not handled, check for a cookie (websockets use cookies for auth)
@@ -118,7 +154,7 @@ public class WebServer {
         }
 
         // fall through, failsafe
-        ctx.status(401).result("Unauthorized key, reference the key existing in config.yml");
+        ctx.status(401).json(Map.of("error", "Unauthorized"));
     }
 
     private static boolean isNoAuthPath(String requestPath) {

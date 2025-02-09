@@ -6,7 +6,6 @@ import io.javalin.openapi.*;
 import dev.ua.uaproject.catwalk.Constants;
 import dev.ua.uaproject.catwalk.api.v1.models.ItemStack;
 import dev.ua.uaproject.catwalk.api.v1.models.Player;
-import dev.ua.uaproject.catwalk.utils.pluginwrappers.EconomyWrapper;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
@@ -19,11 +18,9 @@ import java.util.UUID;
 import java.util.logging.Logger;
 
 public class PlayerApi {
-    private final EconomyWrapper economy;
     private final Logger log;
 
-    public PlayerApi(Logger log, EconomyWrapper economy) {
-        this.economy = economy;
+    public PlayerApi(Logger log) {
         this.log = log;
     }
 
@@ -100,10 +97,6 @@ public class PlayerApi {
         p.setBanned(player.isBanned());
         p.setOp(player.isOp());
 
-        if (economy.isAvailable()) {
-            p.setBalance(economy.getPlayerBalance(player));
-        }
-
         p.setHunger(player.getFoodLevel());
         p.setHealth(player.getHealth());
         p.setSaturation(player.getSaturation());
@@ -150,10 +143,6 @@ public class PlayerApi {
             p.setWhitelisted(offlinePlayer.isWhitelisted());
             p.setBanned(offlinePlayer.isBanned());
             p.setOp(offlinePlayer.isOp());
-
-            if (economy.isAvailable()) {
-                p.setBalance(economy.getPlayerBalance(offlinePlayer));
-            }
 
             p.setLastPlayed(offlinePlayer.getLastPlayed());
 

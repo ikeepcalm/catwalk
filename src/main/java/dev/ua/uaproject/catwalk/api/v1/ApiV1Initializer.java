@@ -4,28 +4,23 @@ import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.utils.ConsoleListener;
 import dev.ua.uaproject.catwalk.api.v1.websockets.WebsocketHandler;
 import dev.ua.uaproject.catwalk.utils.LagDetector;
-import dev.ua.uaproject.catwalk.utils.pluginwrappers.ExternalPluginWrapperRepo;
-
 import java.util.logging.Logger;
 
 public class ApiV1Initializer {
     private final WebsocketHandler websocketHandler;
     private final AdvancementsApi advancementsApi;
-    private final EconomyApi economyApi;
     private final PluginApi pluginApi;
     private final ServerApi serverApi;
     private final PlayerApi playerApi;
     private final WorldApi worldApi;
     private final PAPIApi papiApi;
 
-    public ApiV1Initializer(CatWalkMain main, Logger log, LagDetector lagDetector, ConsoleListener consoleListener,
-                            ExternalPluginWrapperRepo externalPluginWrapperRepo) {
+    public ApiV1Initializer(CatWalkMain main, Logger log, LagDetector lagDetector, ConsoleListener consoleListener) {
         this.websocketHandler = new WebsocketHandler(main, log, consoleListener);
         this.advancementsApi = new AdvancementsApi();
-        this.economyApi = new EconomyApi(externalPluginWrapperRepo.getEconomyWrapper());
         this.pluginApi = new PluginApi(main, log);
-        this.serverApi = new ServerApi(main, log, lagDetector, externalPluginWrapperRepo.getEconomyWrapper());
-        this.playerApi = new PlayerApi(log, externalPluginWrapperRepo.getEconomyWrapper());
+        this.serverApi = new ServerApi(main, log, lagDetector);
+        this.playerApi = new PlayerApi(log);
         this.worldApi = new WorldApi(main, log);
         this.papiApi = new PAPIApi();
     }
@@ -36,10 +31,6 @@ public class ApiV1Initializer {
 
     public AdvancementsApi getAdvancementsApi() {
         return advancementsApi;
-    }
-
-    public EconomyApi getEconomyApi() {
-        return economyApi;
     }
 
     public PluginApi getPluginApi() {
