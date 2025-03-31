@@ -1,25 +1,26 @@
 package dev.ua.uaproject.catwalk;
 
 import dev.ua.uaproject.catwalk.api.v1.ApiV1Initializer;
-import io.javalin.http.Handler;
-import io.javalin.websocket.WsConfig;
 import dev.ua.uaproject.catwalk.utils.ConsoleListener;
 import dev.ua.uaproject.catwalk.utils.LagDetector;
-
-import static dev.ua.uaproject.catwalk.Constants.*;
+import io.javalin.http.Handler;
+import io.javalin.websocket.WsConfig;
 
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
+import static dev.ua.uaproject.catwalk.Constants.API_V1;
+
 public final class WebServerRoutes {
 
-    private WebServerRoutes() {}
+    private WebServerRoutes() {
+    }
 
     public static void addV1Routes(CatWalkMain main, Logger log, LagDetector lagDetector, WebServer webServer,
                                    ConsoleListener consoleListener) {
         PrefixedRouteBuilder pr = new PrefixedRouteBuilder(API_V1, webServer);
 
-        ApiV1Initializer api = new ApiV1Initializer(main, log, lagDetector, consoleListener);
+        ApiV1Initializer api = new ApiV1Initializer(main, log, lagDetector, consoleListener, main.getStatsManager());
 
         pr.get("ping", api.getServerApi()::ping);
 
@@ -54,6 +55,11 @@ public final class WebServerRoutes {
         // Plugin routes
         pr.get("plugins", api.getPluginApi()::listPlugins);
         pr.post("plugins", api.getPluginApi()::installPlugin);
+
+        pr.get("stats/summary", api.getStatsApi()::getStatsSummary);
+        pr.get("stats/online", api.getStatsApi()::getOnlinePlayersData);
+        pr.get("stats/topplayers", api.getStatsApi()::getTopPlayers);
+        pr.get("stats/hourly", api.getStatsApi()::getHourlyDistribution);
 
         // PAPI Routes
         pr.post("placeholders/replace", api.getPapiApi()::replacePlaceholders);
