@@ -134,8 +134,6 @@ public class WebServer {
         }
 
         String authHeader = ctx.header("Authorization");
-        log.info(authHeader);
-        log.info(String.valueOf(ctx.headerMap()));
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
             if (Objects.equals(token, authKey)) {
