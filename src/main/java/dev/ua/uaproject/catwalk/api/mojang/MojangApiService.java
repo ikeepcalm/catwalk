@@ -1,7 +1,7 @@
-package dev.ua.uaproject.catwalk.mojang.api;
+package dev.ua.uaproject.catwalk.api.mojang;
 
 import com.google.gson.Gson;
-import dev.ua.uaproject.catwalk.mojang.api.models.PlayerInfo;
+import dev.ua.uaproject.catwalk.api.mojang.models.PlayerInfo;
 import dev.ua.uaproject.catwalk.utils.GsonSingleton;
 
 import java.io.BufferedReader;

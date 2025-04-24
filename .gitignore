@@ -1,5 +1,8 @@
 *.iml
 .idea/
+/run
+run
+/run/*
 
 .DS_STORE
 target/

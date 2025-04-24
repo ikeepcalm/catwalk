@@ -1,32 +1,35 @@
-package dev.ua.uaproject.catwalk;
+package dev.ua.uaproject.catwalk.webserver;
 
+import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.utils.GsonJsonMapper;
 import io.javalin.Javalin;
-import io.javalin.community.ssl.SSLPlugin;
+import io.javalin.community.ssl.SslPlugin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
 import io.javalin.http.Handler;
 import io.javalin.http.HandlerType;
+import io.javalin.http.UnauthorizedResponse;
 import io.javalin.openapi.plugin.OpenApiPlugin;
-import io.javalin.openapi.plugin.OpenApiPluginConfiguration;
-import io.javalin.openapi.plugin.swagger.SwaggerConfiguration;
+import io.javalin.openapi.plugin.redoc.ReDocPlugin;
 import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
-import io.javalin.security.RouteRole;
 import io.javalin.websocket.WsConfig;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
 public class WebServer {
 
-    public static final String SERVERTAP_KEY_HEADER = "Bearer";
-    public static final String SERVERTAP_KEY_COOKIE = "x-catwalk-key";
-    private static final String[] noAuthPaths = new String[]{"/swagger", "/swagger-docs", "/webjars"};
+    public static final String X_CATWALK_COOKIE = "x-catwalk-key";
+    public static final String X_CATWALK_BEARER = "Bearer ";
+    private static final String[] noAuthPaths = new String[]{"/swagger", "/openapi", "/webjars"};
 
     private final Logger log;
     private final Javalin javalin;
@@ -43,6 +46,8 @@ public class WebServer {
     private final List<String> corsOrigin;
     private final int securePort;
 
+    private OpenApiPlugin openApiPlugin;
+
     public WebServer(CatWalkMain main, FileConfiguration bukkitConfig, Logger logger) {
         this.log = logger;
         this.isDebug = bukkitConfig.getBoolean("debug", false);
@@ -58,6 +63,38 @@ public class WebServer {
         this.securePort = bukkitConfig.getInt("port", 4567);
 
         this.javalin = Javalin.create(config -> configureJavalin(config, main));
+
+        this.javalin.beforeMatched(new Handler() {
+            @Override
+            public void handle(@NotNull Context ctx) throws Exception {
+                if (!isAuthEnabled) {
+                    return;
+                }
+
+                if (isNoAuthPath(ctx.req().getPathInfo())) {
+                    return;
+                }
+
+                String authHeader = ctx.header("Authorization");
+                if (authHeader != null && authHeader.startsWith(X_CATWALK_BEARER)) {
+                    String token = authHeader.substring(7);
+                    if (Objects.equals(token, authKey)) {
+                        return;
+                    }
+                } else {
+                    log.warning("[CatWalk] Unauthorized request: " + ctx.req().getPathInfo());
+                    throw new UnauthorizedResponse();
+                }
+
+                String authCookie = ctx.cookie(X_CATWALK_COOKIE);
+                if (authCookie != null && Objects.equals(authCookie, authKey)) {
+                    return;
+                }
+
+                // fall through, failsafe
+                throw new UnauthorizedResponse();
+            }
+        });
 
         if (bukkitConfig.getBoolean("debug")) {
             this.javalin.before(ctx -> log.info(ctx.req().getPathInfo()));
@@ -77,82 +114,29 @@ public class WebServer {
             log.warning("[CatWalk] CHANGE THE key IN THE config.yml FILE");
             log.warning("[CatWalk] FAILURE TO CHANGE THE KEY MAY RESULT IN SERVER COMPROMISE");
         }
-        config.accessManager(this::manageAccess);
 
         if (!disableSwagger) {
-            config.plugins.register(new OpenApiPlugin(getOpenApiConfig(main)));
-            SwaggerConfiguration swaggerConfiguration = new SwaggerConfiguration();
-            swaggerConfiguration.setDocumentationPath("/swagger-docs");
-            config.plugins.register(new SwaggerPlugin(swaggerConfiguration));
-        }
-    }
+            this.openApiPlugin = new OpenApiPlugin(configuration -> {
+                configuration.withDocumentationPath("/openapi");
+                configuration.withPrettyOutput(true);
+                configuration.withDefinitionConfiguration((version, openApiDefinition) -> {
+                    openApiDefinition.withInfo(openApiInfo -> {
+                        openApiInfo.description("Catwalk API");
+                        openApiInfo.version("1.0.0");
+                        openApiInfo.title("Catwalk");
+                        openApiInfo.contact("@ikeepcalm");
+                    });
+                });
+            });
+            config.registerPlugin(openApiPlugin);
 
-    /**
-     * Verifies the Path is a wagger call or has the correct authentication
-     */
-//    private void manageAccess(Handler handler, Context ctx, Set<? extends RouteRole> routeRoles) throws Exception {
-//        // If auth is not enabled just serve it all
-//        if (!this.isAuthEnabled) {
-//            handler.handle(ctx);
-//            return;
-//        }
-//
-//        if (isNoAuthPath(ctx.req().getPathInfo())) {
-//            handler.handle(ctx);
-//            return;
-//        }
-//
-//        // Auth is turned on, make sure there is a header called "Bearer"
-//        String authHeader = ctx.header(SERVERTAP_KEY_HEADER);
-//        if (authHeader != null && Objects.equals(authHeader, authKey)) {
-//            handler.handle(ctx);
-//            return;
-//        } else {
-//            log.warning("[CatWalk] Unauthorized request: " + ctx.req().getPathInfo());
-//        }
-//
-//        // If the request is still not handled, check for a cookie (websockets use cookies for auth)
-//        String authCookie = ctx.cookie(SERVERTAP_KEY_COOKIE);
-//        if (authCookie != null && Objects.equals(authCookie, authKey)) {
-//            handler.handle(ctx);
-//            return;
-//        }
-//
-//        // fall through, failsafe
-//        ctx.status(401).json(Map.of("error", "Unauthorized"));
-//    }
-    private void manageAccess(Handler handler, Context ctx, Set<? extends RouteRole> routeRoles) throws Exception {
-        // If auth is not enabled just serve it all
-        if (!this.isAuthEnabled) {
-            handler.handle(ctx);
-            return;
-        }
+            // Register Swagger and Redoc plugin
+            config.registerPlugin(new SwaggerPlugin());
+            config.registerPlugin(new ReDocPlugin());
 
-        if (isNoAuthPath(ctx.req().getPathInfo())) {
-            handler.handle(ctx);
-            return;
+            log.info("[CatWalk] Swagger UI enabled at /swagger");
+            log.info("[CatWalk] ReDoc UI enabled at /redoc");
         }
-
-        String authHeader = ctx.header("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            if (Objects.equals(token, authKey)) {
-                handler.handle(ctx);
-                return;
-            }
-        } else {
-            log.warning("[CatWalk] Unauthorized request: " + ctx.req().getPathInfo());
-        }
-
-        // If the request is still not handled, check for a cookie (websockets use cookies for auth)
-        String authCookie = ctx.cookie(SERVERTAP_KEY_COOKIE);
-        if (authCookie != null && Objects.equals(authCookie, authKey)) {
-            handler.handle(ctx);
-            return;
-        }
-
-        // fall through, failsafe
-        ctx.status(401).json(Map.of("error", "Unauthorized"));
     }
 
     private static boolean isNoAuthPath(String requestPath) {
@@ -160,7 +144,7 @@ public class WebServer {
     }
 
     private void configureCors(JavalinConfig config) {
-        config.plugins.enableCors(cors -> cors.add(corsConfig -> {
+        config.bundledPlugins.enableCors(cors -> cors.addRule(corsConfig -> {
             if (corsOrigin.contains("*")) {
                 log.info("[CatWalk] Enabling CORS for *");
                 corsConfig.anyHost();
@@ -183,7 +167,7 @@ public class WebServer {
 
             if (Files.exists(Paths.get(fullKeystorePath))) {
                 // Register the SSL plugin
-                SSLPlugin plugin = new SSLPlugin(conf -> {
+                SslPlugin plugin = new SslPlugin(conf -> {
                     conf.keystoreFromPath(fullKeystorePath, keyStorePassword);
                     conf.http2 = false;
                     conf.insecure = false;
@@ -191,7 +175,8 @@ public class WebServer {
                     conf.securePort = securePort;
                     conf.sniHostCheck = sni;
                 });
-                config.plugins.register(plugin);
+
+                config.registerPlugin(plugin);
                 log.info("[CatWalk] TLS is enabled.");
             } else {
                 log.warning(String.format("[CatWalk] TLS is enabled but %s doesn't exist. TLS disabled.", fullKeystorePath));
@@ -200,17 +185,6 @@ public class WebServer {
             log.severe("[CatWalk] Error while enabling TLS: " + e.getMessage());
             log.warning("[CatWalk] TLS is not enabled.");
         }
-    }
-
-    private OpenApiPluginConfiguration getOpenApiConfig(CatWalkMain main) {
-        return new OpenApiPluginConfiguration()
-                .withDocumentationPath("/swagger-docs")
-                .withDefinitionConfiguration((version, definition) -> definition
-                        .withOpenApiInfo((openApiInfo) -> {
-                            openApiInfo.setTitle(main.getDescription().getName());
-                            openApiInfo.setVersion(main.getDescription().getVersion());
-                            openApiInfo.setDescription(main.getDescription().getDescription());
-                        }));
     }
 
     public void get(String route, Handler handler) {
@@ -229,11 +203,15 @@ public class WebServer {
         this.addRoute(HandlerType.DELETE, route, handler);
     }
 
+    public OpenApiPlugin getOpenApiPlugin() {
+        return this.openApiPlugin;
+    }
+
     public void addRoute(HandlerType httpMethod, String route, Handler handler) {
         // Checks to see if passed route is blocked in the config.
         // Note: The second check is for any blocked routes that start with a /
         if (!(blockedPaths.contains(route) || blockedPaths.contains("/" + route))) {
-            this.javalin.addHandler(httpMethod, route, handler);
+            this.javalin.addHttpHandler(httpMethod, route, handler);
         } else if (isDebug) {
             log.info(String.format("Not adding Route '%s' because it is blocked in the config.", route));
         }

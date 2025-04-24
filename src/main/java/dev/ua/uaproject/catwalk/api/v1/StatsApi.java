@@ -17,17 +17,12 @@ import java.util.logging.Logger;
 
 public class StatsApi {
 
-    private final Logger log;
     private final LagDetector lagDetector;
     private final StatsManager statsManager;
-    private final ZoneId serverTimeZone;
-    private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
 
     public StatsApi(Logger log, LagDetector lagDetector, StatsManager statsManager) {
-        this.log = log;
         this.lagDetector = lagDetector;
         this.statsManager = statsManager;
-        this.serverTimeZone = ZoneId.systemDefault();
     }
 
     @OpenApi(
@@ -44,7 +39,6 @@ public class StatsApi {
     public void getStatsSummary(Context ctx) {
         Map<String, Object> summary = statsManager.getStatsSummary();
 
-        // Add TPS (server performance) - this comes from LagDetector
         summary.put("tps", lagDetector.getTPSString());
 
         ctx.json(summary);
@@ -70,7 +64,6 @@ public class StatsApi {
         if (daysParam != null) {
             try {
                 days = Integer.parseInt(daysParam);
-                // Limit to 14 days to avoid excessive data
                 if (days > 14) days = 14;
                 if (days < 1) days = 1;
             } catch (NumberFormatException ignored) {
@@ -80,11 +73,9 @@ public class StatsApi {
 
         Map<String, Object> response = new HashMap<>();
 
-        // Get real historical data from StatsManager
         List<Map<String, Object>> playersData = statsManager.getOnlinePlayersData(days);
         response.put("players", playersData);
 
-        // Get current hourly distribution
         Map<String, Integer> hourlyDistribution = statsManager.getCurrentHourlyDistribution();
         response.put("hourlyDistribution", hourlyDistribution);
 

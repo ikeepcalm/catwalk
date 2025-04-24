@@ -3,7 +3,7 @@ package dev.ua.uaproject.catwalk.api.v1;
 import de.tr7zw.nbtapi.NBTFile;
 import io.javalin.http.*;
 import io.javalin.openapi.*;
-import dev.ua.uaproject.catwalk.Constants;
+import dev.ua.uaproject.catwalk.utils.Constants;
 import dev.ua.uaproject.catwalk.api.v1.models.ItemStack;
 import dev.ua.uaproject.catwalk.api.v1.models.Player;
 import org.bukkit.Bukkit;

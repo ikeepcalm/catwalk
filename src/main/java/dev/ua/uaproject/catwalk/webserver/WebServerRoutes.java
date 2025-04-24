@@ -1,5 +1,6 @@
-package dev.ua.uaproject.catwalk;
+package dev.ua.uaproject.catwalk.webserver;
 
+import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.api.v1.ApiV1Initializer;
 import dev.ua.uaproject.catwalk.utils.ConsoleListener;
 import dev.ua.uaproject.catwalk.utils.LagDetector;
@@ -9,7 +10,7 @@ import io.javalin.websocket.WsConfig;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
-import static dev.ua.uaproject.catwalk.Constants.API_V1;
+import static dev.ua.uaproject.catwalk.utils.Constants.API_V1;
 
 public final class WebServerRoutes {
 

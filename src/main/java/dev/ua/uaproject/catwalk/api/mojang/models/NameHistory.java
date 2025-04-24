@@ -1,4 +1,4 @@
-package dev.ua.uaproject.catwalk.mojang.api.models;
+package dev.ua.uaproject.catwalk.api.mojang.models;
 
 import java.util.List;
 

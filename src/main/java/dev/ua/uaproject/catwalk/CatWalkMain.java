@@ -5,11 +5,14 @@ import dev.ua.uaproject.catwalk.api.v1.stats.StatsListener;
 import dev.ua.uaproject.catwalk.api.v1.stats.StatsManager;
 import dev.ua.uaproject.catwalk.commands.CatWalkCommand;
 import dev.ua.uaproject.catwalk.metrics.Metrics;
-import dev.ua.uaproject.catwalk.plugin.api.CatWalkWebserverService;
-import dev.ua.uaproject.catwalk.plugin.api.CatWalkWebserverServiceImpl;
 import dev.ua.uaproject.catwalk.utils.ConsoleListener;
 import dev.ua.uaproject.catwalk.utils.LagDetector;
 import dev.ua.uaproject.catwalk.webhooks.WebhookEventListener;
+import dev.ua.uaproject.catwalk.webserver.WebServer;
+import dev.ua.uaproject.catwalk.webserver.WebServerRoutes;
+import dev.ua.uaproject.catwalk.webserver.catwalk.CatWalkWebserverService;
+import dev.ua.uaproject.catwalk.webserver.catwalk.impl.CatWalkWebserverServiceImpl;
+import io.javalin.openapi.plugin.OpenApiPlugin;
 import io.papermc.paper.plugin.configuration.PluginMeta;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.Logger;
@@ -45,16 +48,12 @@ public class CatWalkMain extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        // Tell bStats what plugin this is
         new Metrics(this, 9492);
 
         this.statsManager = new StatsManager(this);
 
-        // Start the TPS Counter with a 100 tick Delay every 1 tick
         Bukkit.getScheduler().runTaskTimer(this, lagDetector, 100, 1);
 
-
-        // Initialize config file + set defaults
         saveDefaultConfig();
 
         FileConfiguration bukkitConfig = getConfig();
@@ -69,8 +68,6 @@ public class CatWalkMain extends JavaPlugin {
         webhookEventListener = new WebhookEventListener(this, bukkitConfig, log);
         server.getPluginManager().registerEvents(webhookEventListener, this);
         server.getPluginManager().registerEvents(new StatsListener(statsManager), this);
-
-
         server.getServicesManager().register(CatWalkWebserverService.class, new CatWalkWebserverServiceImpl(this), this, ServicePriority.Normal);
     }
 
@@ -117,6 +114,10 @@ public class CatWalkMain extends JavaPlugin {
 
     public WebServer getWebServer() {
         return this.app;
+    }
+
+    public OpenApiPlugin getOpenApiPlugin() {
+        return this.app.getOpenApiPlugin();
     }
 
     public StatsManager getStatsManager() {

@@ -1,6 +1,5 @@
 package dev.ua.uaproject.catwalk.utils;
 
-import dev.ua.uaproject.catwalk.Constants;
 import dev.ua.uaproject.catwalk.CatWalkMain;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;

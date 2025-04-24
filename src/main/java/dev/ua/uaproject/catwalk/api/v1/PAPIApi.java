@@ -3,7 +3,7 @@ package dev.ua.uaproject.catwalk.api.v1;
 import io.javalin.http.BadRequestResponse;
 import io.javalin.http.Context;
 import io.javalin.openapi.*;
-import dev.ua.uaproject.catwalk.Constants;
+import dev.ua.uaproject.catwalk.utils.Constants;
 import me.clip.placeholderapi.PlaceholderAPI;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;

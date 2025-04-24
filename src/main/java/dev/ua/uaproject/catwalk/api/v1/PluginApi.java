@@ -4,7 +4,7 @@ import io.javalin.http.BadRequestResponse;
 import io.javalin.http.Context;
 import io.javalin.http.InternalServerErrorResponse;
 import io.javalin.openapi.*;
-import dev.ua.uaproject.catwalk.Constants;
+import dev.ua.uaproject.catwalk.utils.Constants;
 import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.api.v1.models.Plugin;
 import org.apache.commons.io.FileUtils;
