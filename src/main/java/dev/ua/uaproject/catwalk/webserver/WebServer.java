@@ -29,7 +29,7 @@ public class WebServer {
 
     public static final String X_CATWALK_COOKIE = "x-catwalk-key";
     public static final String X_CATWALK_BEARER = "Bearer ";
-    private static final String[] noAuthPaths = new String[]{"/swagger", "/openapi", "/webjars"};
+    private static final String[] noAuthPaths = new String[]{"/swagger", "/openapi", "/webjars", "/redoc"};
 
     private final Logger log;
     private final Javalin javalin;
