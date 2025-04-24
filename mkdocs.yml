@@ -1,14 +1,14 @@
 ---
 # Project information
-site_name: ServerTap
-site_description: A JSON API for your Bukkit/Spigot/Paper Minecraft server
-site_author: phybros
-site_url: https://servertap.io
+site_name: CatWalk
+site_description: A REST API for your Bukkit/Spigot/Paper Minecraft server
+site_author: THEROER
+site_url: https://catwalk.uaproject.dev
 
 # Repository
-repo_name: servertap-io/servertap
-repo_url: https://github.com/servertap-io/servertap
-edit_uri: "edit/master/docs/"
+repo_name: uaproject/catwalk
+repo_url: https://github.com/uaproject/catwalk
+edit_uri: "edit/main/docs/"
 
 theme:
   name: material
@@ -39,7 +39,7 @@ docs_dir: ./docs
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/servertap-io/servertap
+      link: https://github.com/uaproject/catwalk
     - icon: fontawesome/brands/discord
       link: https://discord.gg/fefHbTFAkj
 
