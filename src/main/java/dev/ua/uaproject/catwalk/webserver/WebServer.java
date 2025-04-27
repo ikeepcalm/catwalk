@@ -9,6 +9,7 @@ import io.javalin.http.Context;
 import io.javalin.http.Handler;
 import io.javalin.http.HandlerType;
 import io.javalin.http.UnauthorizedResponse;
+import io.javalin.http.staticfiles.Location;
 import io.javalin.openapi.plugin.OpenApiPlugin;
 import io.javalin.openapi.plugin.redoc.ReDocPlugin;
 import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
@@ -29,7 +30,7 @@ public class WebServer {
 
     public static final String X_CATWALK_COOKIE = "x-catwalk-key";
     public static final String X_CATWALK_BEARER = "Bearer ";
-    private static final String[] noAuthPaths = new String[]{"/swagger", "/openapi", "/webjars", "/redoc"};
+    private static final String[] noAuthPaths = new String[]{"/swagger", "/openapi", "/webjars", "/redoc", "/plugins"};
 
     private final Logger log;
     private final Javalin javalin;
@@ -96,6 +97,8 @@ public class WebServer {
             }
         });
 
+        javalin.get("/swagger", ctx -> ctx.redirect("/swagger.html"));
+
         if (bukkitConfig.getBoolean("debug")) {
             this.javalin.before(ctx -> log.info(ctx.req().getPathInfo()));
         }
@@ -117,7 +120,7 @@ public class WebServer {
 
         if (!disableSwagger) {
             this.openApiPlugin = new OpenApiPlugin(configuration -> {
-                configuration.withDocumentationPath("/openapi");
+                configuration.withDocumentationPath("/openapi.json");
                 configuration.withPrettyOutput(true);
                 configuration.withDefinitionConfiguration((version, openApiDefinition) -> {
                     openApiDefinition.withInfo(openApiInfo -> {
@@ -128,10 +131,18 @@ public class WebServer {
                     });
                 });
             });
+
+            config.staticFiles.add(staticFiles -> {
+                staticFiles.directory = "/public";
+                staticFiles.hostedPath = "/";
+                staticFiles.location = Location.CLASSPATH;
+            });
             config.registerPlugin(openApiPlugin);
 
             // Register Swagger and Redoc plugin
-            config.registerPlugin(new SwaggerPlugin());
+            config.registerPlugin(new SwaggerPlugin(configuration -> {
+                configuration.setUiPath("/plainswagger");
+            }));
             config.registerPlugin(new ReDocPlugin());
 
             log.info("[CatWalk] Swagger UI enabled at /swagger");

@@ -66,7 +66,7 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
      */
     @Override
     public void registerHandlers(Object handlerInstance) {
-        bridgeProcessor.registerHandler(handlerInstance);
+        bridgeProcessor.registerHandler(handlerInstance, null);
     }
 
     /**

@@ -5,16 +5,13 @@ import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.bridge.annotations.BridgeEventHandler;
 import dev.ua.uaproject.catwalk.utils.GsonSingleton;
 import dev.ua.uaproject.catwalk.webserver.WebServer;
-import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import io.javalin.openapi.HttpMethod;
 import io.javalin.openapi.OpenApi;
-import io.javalin.openapi.plugin.OpenApiPlugin;
-import io.javalin.openapi.plugin.redoc.ReDocPlugin;
-import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 import org.slf4j.Logger;
 
+import javax.annotation.Nullable;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.HashMap;
@@ -36,41 +33,14 @@ public class BridgeEventHandlerProcessor {
         this.objectMapper = new ObjectMapper();
     }
 
-    public void registerDocumentations(String plugin) {
-        JavalinConfig config = CatWalkMain.instance.getWebServer().getJavalin().unsafeConfig();
-
-        config.registerPlugin(new OpenApiPlugin(configuration -> {
-            configuration.withDocumentationPath("/" + plugin + "/openapi");
-            configuration.withPrettyOutput(true);
-            configuration.withDefinitionConfiguration((version, openApiDefinition) -> {
-                openApiDefinition.withInfo(openApiInfo -> {
-                    openApiInfo.description("Catwalk API Extension for " + plugin);
-                    openApiInfo.version("1.0.0");
-                    openApiInfo.title("Catwalk");
-                    openApiInfo.contact("@ikeepcalm");
-                });
-            });
-        }));
-
-        // Reregister Swagger and Redoc plugin
-        config.registerPlugin(new SwaggerPlugin(configuration -> {
-            configuration.setUiPath("/" + plugin + "/swagger");
-            configuration.setDocumentationPath("/" + plugin + "/openapi");
-        }));
-
-        config.registerPlugin(new ReDocPlugin(configuration -> {
-            configuration.setUiPath("/" + plugin + "/redoc");
-            configuration.setDocumentationPath("/" + plugin + "/openapi");
-        }));
-    }
-
     /**
      * Registers all methods in the handler instance that have the OpenApi annotation.
      *
      * @param handlerInstance The instance containing handler methods
      */
-    public void registerHandler(Object handlerInstance) {
+    public void registerHandler(Object handlerInstance, @Nullable String docs) {
         Class<?> clazz = handlerInstance.getClass();
+        WebServer webServer = CatWalkMain.instance.getWebServer();
         for (Method method : clazz.getDeclaredMethods()) {
             OpenApi openApiAnnotation = method.getAnnotation(OpenApi.class);
             if (openApiAnnotation == null) continue;
@@ -78,7 +48,6 @@ public class BridgeEventHandlerProcessor {
             BridgeEventHandler bridgeAnnotation = method.getAnnotation(BridgeEventHandler.class);
             boolean requiresAuth = bridgeAnnotation == null || bridgeAnnotation.requiresAuth();
 
-            WebServer webServer = CatWalkMain.instance.getWebServer();
             logger.info("Registering handler method: {}; Path: {}", method.getName(), openApiAnnotation.path());
 
             // If no HTTP methods are specified, default to GET
@@ -89,8 +58,11 @@ public class BridgeEventHandlerProcessor {
             }
         }
 
-        logger.info("Registered {} handler methods for {}", clazz.getDeclaredMethods().length, handlerInstance.getClass().getSimpleName().toLowerCase());
-//        registerDocumentations(handlerInstance.getClass().getSimpleName().toLowerCase());
+        if (docs != null) {
+            webServer.get("/plugins/graylist/openapi.json", ctx -> {
+                ctx.contentType("application/json").result(docs);
+            });
+        }
     }
 
     /**
