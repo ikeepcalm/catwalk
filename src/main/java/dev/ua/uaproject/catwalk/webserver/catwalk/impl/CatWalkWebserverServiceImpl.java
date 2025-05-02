@@ -1,5 +1,7 @@
 package dev.ua.uaproject.catwalk.webserver.catwalk.impl;
 
+import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.bridge.BridgeEventHandlerProcessor;
 import dev.ua.uaproject.catwalk.webserver.WebServer;
 import dev.ua.uaproject.catwalk.webserver.catwalk.CatWalkWebserverService;
 import io.javalin.Javalin;
@@ -7,8 +9,6 @@ import io.javalin.http.Context;
 import io.javalin.http.Handler;
 import io.javalin.http.HttpStatus;
 import io.javalin.websocket.WsConfig;
-import dev.ua.uaproject.catwalk.CatWalkMain;
-import dev.ua.uaproject.catwalk.bridge.BridgeEventHandlerProcessor;
 import org.slf4j.LoggerFactory;
 
 import java.util.function.Consumer;
@@ -66,16 +66,16 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
      */
     @Override
     public void registerHandlers(Object handlerInstance) {
-        bridgeProcessor.registerHandler(handlerInstance, null);
+        bridgeProcessor.registerHandler(handlerInstance, null, null);
     }
 
     /**
      * Registers a GET endpoint that returns the result of a function.
      * Handles errors and sets appropriate status codes.
      *
-     * @param path The path to handle
+     * @param path             The path to handle
      * @param responseFunction A function that handles the request and returns a response
-     * @param <T> The type of the response
+     * @param <T>              The type of the response
      */
     @Override
     public <T> void getWithResponse(String path, Function<Context, T> responseFunction) {
@@ -86,9 +86,9 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
      * Registers a POST endpoint that returns the result of a function.
      * Handles errors and sets appropriate status codes.
      *
-     * @param path The path to handle
+     * @param path             The path to handle
      * @param responseFunction A function that handles the request and returns a response
-     * @param <T> The type of the response
+     * @param <T>              The type of the response
      */
     @Override
     public <T> void postWithResponse(String path, Function<Context, T> responseFunction) {
@@ -99,9 +99,9 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
      * Registers a PUT endpoint that returns the result of a function.
      * Handles errors and sets appropriate status codes.
      *
-     * @param path The path to handle
+     * @param path             The path to handle
      * @param responseFunction A function that handles the request and returns a response
-     * @param <T> The type of the response
+     * @param <T>              The type of the response
      */
     @Override
     public <T> void putWithResponse(String path, Function<Context, T> responseFunction) {
@@ -112,9 +112,9 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
      * Registers a DELETE endpoint that returns the result of a function.
      * Handles errors and sets appropriate status codes.
      *
-     * @param path The path to handle
+     * @param path             The path to handle
      * @param responseFunction A function that handles the request and returns a response
-     * @param <T> The type of the response
+     * @param <T>              The type of the response
      */
     @Override
     public <T> void deleteWithResponse(String path, Function<Context, T> responseFunction) {

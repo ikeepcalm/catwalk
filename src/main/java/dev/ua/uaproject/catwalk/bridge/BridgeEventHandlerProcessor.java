@@ -3,6 +3,7 @@ package dev.ua.uaproject.catwalk.bridge;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.bridge.annotations.BridgeEventHandler;
+import dev.ua.uaproject.catwalk.bridge.annotations.BridgePathParam;
 import dev.ua.uaproject.catwalk.utils.GsonSingleton;
 import dev.ua.uaproject.catwalk.webserver.WebServer;
 import io.javalin.http.Context;
@@ -14,6 +15,7 @@ import org.slf4j.Logger;
 import javax.annotation.Nullable;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -38,7 +40,7 @@ public class BridgeEventHandlerProcessor {
      *
      * @param handlerInstance The instance containing handler methods
      */
-    public void registerHandler(Object handlerInstance, @Nullable String docs) {
+    public void registerHandler(Object handlerInstance, String plugin, @Nullable String docs) {
         Class<?> clazz = handlerInstance.getClass();
         WebServer webServer = CatWalkMain.instance.getWebServer();
         for (Method method : clazz.getDeclaredMethods()) {
@@ -59,7 +61,7 @@ public class BridgeEventHandlerProcessor {
         }
 
         if (docs != null) {
-            webServer.get("/plugins/graylist/openapi.json", ctx -> {
+            webServer.get("/plugins/" + plugin + "/openapi.json", ctx -> {
                 ctx.contentType("application/json").result(docs);
             });
         }
@@ -102,25 +104,47 @@ public class BridgeEventHandlerProcessor {
             // Extract path parameters if any
             Map<String, String> pathParams = new HashMap<>();
             for (Parameter parameter : method.getParameters()) {
+                // Handle OpenApiParam annotation (for backward compatibility)
                 if (parameter.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class)) {
                     io.javalin.openapi.OpenApiParam paramAnnotation = parameter.getAnnotation(io.javalin.openapi.OpenApiParam.class);
                     String paramName = paramAnnotation.name();
                     String paramValue = context.pathParam(paramName);
                     pathParams.put(paramName, paramValue);
                 }
+                // Handle our custom PathParam annotation
+                else if (parameter.isAnnotationPresent(BridgePathParam.class)) {
+                    BridgePathParam paramAnnotation =
+                        parameter.getAnnotation(BridgePathParam.class);
+                    String paramName = paramAnnotation.value();
+                    String paramValue = context.pathParam(paramName);
+                    pathParams.put(paramName, paramValue);
+                }
             }
-
+    
+            // Check if the method has path parameter annotations
+            boolean hasPathParameters = method.getParameters().length > 0 && 
+                                        Arrays.stream(method.getParameters())
+                                              .anyMatch(p -> p.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class) || 
+                                                          p.isAnnotationPresent(BridgePathParam.class));
+    
             // Parse request body if needed
             Object requestBody = null;
             if (paramType != null && !paramType.equals(Void.class)) {
-                requestBody = deserializeRequestBody(context, paramType);
+                requestBody = deserializeRequestBody(context, paramType, pathParams);
             }
-
+    
             // Invoke the method and handle the result
             Object result;
-            if (paramType != null && !paramType.equals(Void.class)) {
+            
+            if (hasPathParameters) {
+                // Handle methods with path parameters
+                Object[] args = prepareMethodArguments(method, context, requestBody, pathParams);
+                result = method.invoke(handlerInstance, args);
+            } else if (paramType != null && !paramType.equals(Void.class)) {
+                // Standard method with request body
                 result = method.invoke(handlerInstance, requestBody);
             } else {
+                // Method with no parameters
                 result = method.invoke(handlerInstance);
             }
 
@@ -167,29 +191,76 @@ public class BridgeEventHandlerProcessor {
     }
 
     /**
-     * Gets the type of the method parameter, or null if it has no parameters.
+     * Gets the type of the method parameter that will receive the request body, 
+     * or null if it has no parameters or only has path parameters.
      */
     private Class<?> getMethodParamType(Method method) {
         if (method.getParameterCount() == 0) {
             return null;
         }
+        
+        // If there are multiple parameters, we need to check for path parameters
         if (method.getParameterCount() > 1) {
-            throw new IllegalArgumentException("Method must have at most one parameter: " + method.getName());
+            // Check if all parameters except one are annotated with OpenApiParam or PathParam
+            Parameter[] parameters = method.getParameters();
+            Parameter nonPathParam = null;
+            
+            for (Parameter param : parameters) {
+                if (!isPathParameter(param) && !param.getType().equals(Context.class)) {
+                    if (nonPathParam != null) {
+                        // Found more than one non-path parameter
+                        throw new IllegalArgumentException("Method must have at most one non-path parameter: " + method.getName());
+                    }
+                    nonPathParam = param;
+                }
+            }
+            
+            // If we found exactly one non-path parameter, return its type
+            if (nonPathParam != null) {
+                return nonPathParam.getType();
+            }
+            
+            // All parameters are path parameters
+            return null;
         }
+        
+        // Only one parameter - check if it's a path parameter
+        Parameter param = method.getParameters()[0];
+        if (isPathParameter(param)) {
+            return null; // It's a path parameter, no request body needed
+        }
+        
         return method.getParameterTypes()[0];
+    }
+    
+    /**
+     * Checks if a parameter is a path parameter (has either OpenApiParam or PathParam annotation)
+     */
+    private boolean isPathParameter(Parameter parameter) {
+        return parameter.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class) ||
+               parameter.isAnnotationPresent(BridgePathParam.class);
     }
 
     /**
      * Deserializes the request body to the specified parameter type.
+     * Also handles path parameters and populates them into the object if field names match.
+     *
+     * @param context The Javalin context containing the request
+     * @param paramType The type of the parameter to deserialize to
+     * @param pathParams Map of path parameters extracted from the URL
+     * @return The deserialized object with fields populated from the request body and path parameters
      */
-    private Object deserializeRequestBody(Context context, Class<?> paramType) throws Exception {
+    private Object deserializeRequestBody(Context context, Class<?> paramType, Map<String, String> pathParams) throws Exception {
         // Choose deserialization method based on content type
         String contentType = context.contentType();
+        Object instance;
+        
         if (contentType != null && contentType.contains("application/json")) {
-            return objectMapper.readValue(context.body(), paramType);
+            // Create from JSON body
+            instance = objectMapper.readValue(context.body(), paramType);
         } else if (contentType != null && contentType.contains("application/x-www-form-urlencoded")) {
             // For form data, create an instance and populate fields based on form params
-            Object instance = paramType.getDeclaredConstructor().newInstance();
+            instance = paramType.getDeclaredConstructor().newInstance();
             for (java.lang.reflect.Field field : paramType.getDeclaredFields()) {
                 field.setAccessible(true);
                 String fieldName = field.getName();
@@ -200,11 +271,32 @@ public class BridgeEventHandlerProcessor {
                     field.set(instance, convertedValue);
                 }
             }
-            return instance;
         } else {
-            // Default to JSON
-            return objectMapper.readValue(context.body(), paramType);
+            // Default to JSON if content type is not specified
+            try {
+                instance = objectMapper.readValue(context.body(), paramType);
+            } catch (Exception e) {
+                // If JSON parsing fails, try creating an empty instance
+                instance = paramType.getDeclaredConstructor().newInstance();
+            }
         }
+        
+        // Now populate any path parameters that match field names
+        if (!pathParams.isEmpty()) {
+            for (java.lang.reflect.Field field : paramType.getDeclaredFields()) {
+                field.setAccessible(true);
+                String fieldName = field.getName();
+                String pathValue = pathParams.get(fieldName);
+                
+                if (pathValue != null) {
+                    // Convert the string value to the field's type
+                    Object convertedValue = convertStringToType(pathValue, field.getType());
+                    field.set(instance, convertedValue);
+                }
+            }
+        }
+        
+        return instance;
     }
 
     /**
@@ -229,5 +321,57 @@ public class BridgeEventHandlerProcessor {
                 return value; // Return as string if deserialization fails
             }
         }
+    }
+    
+    /**
+     * Prepares an array of arguments to be passed to the handler method.
+     * Supports path parameters and request body.
+     *
+     * @param method The method to invoke
+     * @param context The Javalin context
+     * @param requestBody The deserialized request body (if any)
+     * @param pathParams Map of path parameters extracted from the URL
+     * @return Array of arguments to pass to the method
+     */
+    private Object[] prepareMethodArguments(Method method, Context context, Object requestBody, Map<String, String> pathParams) {
+        Parameter[] parameters = method.getParameters();
+        Object[] args = new Object[parameters.length];
+        
+        for (int i = 0; i < parameters.length; i++) {
+            Parameter parameter = parameters[i];
+            
+            // Handle OpenApiParam path parameters (backward compatibility)
+            if (parameter.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class)) {
+                io.javalin.openapi.OpenApiParam paramAnnotation = parameter.getAnnotation(io.javalin.openapi.OpenApiParam.class);
+                String paramName = paramAnnotation.name();
+                String paramValue = context.pathParam(paramName);
+                
+                // Convert the string value to the parameter's type
+                args[i] = convertStringToType(paramValue, parameter.getType());
+            } 
+            // Handle our custom PathParam annotation
+            else if (parameter.isAnnotationPresent(BridgePathParam.class)) {
+                BridgePathParam paramAnnotation = parameter.getAnnotation(BridgePathParam.class);
+                String paramName = paramAnnotation.value();
+                String paramValue = context.pathParam(paramName);
+                
+                // Convert the string value to the parameter's type
+                args[i] = convertStringToType(paramValue, parameter.getType());
+            }
+            // Handle request body parameter
+            else if (requestBody != null && parameter.getType().isAssignableFrom(requestBody.getClass())) {
+                args[i] = requestBody;
+            }
+            // Handle context parameter
+            else if (parameter.getType().equals(Context.class)) {
+                args[i] = context;
+            }
+            // Unrecognized parameter type
+            else {
+                args[i] = null;
+            }
+        }
+        
+        return args;
     }
 }
