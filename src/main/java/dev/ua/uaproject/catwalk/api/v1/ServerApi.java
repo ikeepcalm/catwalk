@@ -48,9 +48,7 @@ public class ServerApi {
             path = "/v1/ping",
             summary = "pong!",
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             responses = {
                     @OpenApiResponse(status = "200", content = @OpenApiContent(type = "application/json"))
             }
@@ -63,9 +61,7 @@ public class ServerApi {
             path = "/v1/server",
             summary = "Get information about the server",
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             responses = {
                     @OpenApiResponse(status = "200", content = @OpenApiContent(from = Server.class))
             }
@@ -140,9 +136,7 @@ public class ServerApi {
             methods = {HttpMethod.POST},
             summary = "Send broadcast visible to those currently online.",
             tags = {"Chat"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             requestBody = @OpenApiRequestBody(
                     required = true,
                     content = {
@@ -170,9 +164,7 @@ public class ServerApi {
             methods = {HttpMethod.POST},
             summary = "Send a message to a specific player.",
             tags = {"Chat"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             requestBody = @OpenApiRequestBody(
                     required = true,
                     content = {
@@ -209,9 +201,7 @@ public class ServerApi {
             path = "/v1/scoreboard",
             summary = "Get information about the scoreboard objectives",
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             responses = {
                     @OpenApiResponse(status = "200", content = @OpenApiContent(from = Scoreboard.class))
             }
@@ -236,9 +226,7 @@ public class ServerApi {
             path = "/v1/scoreboard/{name}",
             summary = "Get information about a specific objective",
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             pathParams = {
                     @OpenApiParam(name = "name", description = "The name of the objective to get")
             },
@@ -297,9 +285,7 @@ public class ServerApi {
             methods = {HttpMethod.GET},
             summary = "Get the whitelist",
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             responses = {
                     @OpenApiResponse(status = "200", content = @OpenApiContent(from = Whitelist.class))
             }
@@ -319,9 +305,7 @@ public class ServerApi {
             summary = "Update the whitelist",
             description = "Possible responses are: `success`, `failed`, `Error: duplicate entry`, and `No whitelist`.",
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             requestBody = @OpenApiRequestBody(
                     required = true,
                     content = {
@@ -395,9 +379,7 @@ public class ServerApi {
             methods = {HttpMethod.DELETE},
             summary = "Delete specific player from the whitelist",
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             requestBody = @OpenApiRequestBody(
                     required = true,
                     content = {
@@ -464,9 +446,7 @@ public class ServerApi {
             methods = {HttpMethod.POST},
             summary = "Sets a specific player to Op",
             tags = {"Player"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             requestBody = @OpenApiRequestBody(
                     required = true,
                     content = {
@@ -501,9 +481,7 @@ public class ServerApi {
             methods = {HttpMethod.DELETE},
             summary = "Removes Op from a specific player",
             tags = {"Player"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             requestBody = @OpenApiRequestBody(
                     required = true,
                     content = {
@@ -536,9 +514,7 @@ public class ServerApi {
             methods = {HttpMethod.GET},
             summary = "Get all op players",
             tags = {"Player"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             responses = {
                     @OpenApiResponse(
                             status = "200",
@@ -575,9 +551,7 @@ public class ServerApi {
             summary = "Executes a command on the server from the console, returning it's output. Be aware that not all " +
                     "command executors will properly send their messages to the CommandSender, though, most do.",
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             requestBody = @OpenApiRequestBody(
                     required = true,
                     content = {

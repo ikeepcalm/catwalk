@@ -10,7 +10,9 @@ import io.javalin.http.Handler;
 import io.javalin.http.HandlerType;
 import io.javalin.http.UnauthorizedResponse;
 import io.javalin.http.staticfiles.Location;
+import io.javalin.openapi.BearerAuth;
 import io.javalin.openapi.plugin.OpenApiPlugin;
+import io.javalin.openapi.plugin.SecurityComponentConfiguration;
 import io.javalin.openapi.plugin.redoc.ReDocPlugin;
 import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 import io.javalin.websocket.WsConfig;
@@ -77,23 +79,33 @@ public class WebServer {
                 }
 
                 String authHeader = ctx.header("Authorization");
+
+                // Check for bearer token
                 if (authHeader != null && authHeader.startsWith(X_CATWALK_BEARER)) {
                     String token = authHeader.substring(7);
                     if (Objects.equals(token, authKey)) {
+                        if (isDebug) {
+                            log.info("[CatWalk] Auth successful via Bearer token for: " + ctx.req().getPathInfo());
+                        }
                         return;
+                    } else {
+                        log.warning("[CatWalk] Invalid Bearer token provided: " + token.substring(0, Math.min(token.length(), 5)) + "...");
                     }
-                } else {
-                    log.warning("[CatWalk] Unauthorized request: " + ctx.req().getPathInfo());
-                    throw new UnauthorizedResponse();
                 }
 
+                // Check for auth cookie
                 String authCookie = ctx.cookie(X_CATWALK_COOKIE);
                 if (authCookie != null && Objects.equals(authCookie, authKey)) {
+                    if (isDebug) {
+                        log.info("[CatWalk] Auth successful via cookie for: " + ctx.req().getPathInfo());
+                    }
                     return;
                 }
 
-                // fall through, failsafe
-                throw new UnauthorizedResponse();
+                // Auth failed, log detailed message
+                log.warning("[CatWalk] Unauthorized request: " + ctx.req().getPathInfo() +
+                        " - Authorization header: " + (authHeader != null ? "present" : "missing"));
+                throw new UnauthorizedResponse("Authentication required. Use Bearer token authentication.");
             }
         });
 
@@ -122,13 +134,27 @@ public class WebServer {
             this.openApiPlugin = new OpenApiPlugin(configuration -> {
                 configuration.withDocumentationPath("/openapi.json");
                 configuration.withPrettyOutput(true);
+
+                // Configure the OpenAPI security scheme for Bearer authentication
                 configuration.withDefinitionConfiguration((version, openApiDefinition) -> {
+                    // Basic API info
                     openApiDefinition.withInfo(openApiInfo -> {
                         openApiInfo.description("Catwalk API");
                         openApiInfo.version("1.0.0");
                         openApiInfo.title("Catwalk");
                         openApiInfo.contact("@ikeepcalm");
                     });
+
+                    // Add security schemes if authentication is enabled
+//                    if (isAuthEnabled) {
+//                        // Apply the security requirement globally
+//                        openApiDefinition.withSecurity(SecurityComponentConfiguration::withBearerAuth);
+//
+//                        // Define the security scheme
+//                        openApiDefinition.withSecurity(securityComponentConfiguration -> {
+//                            securityComponentConfiguration.withSecurityScheme("bearerAuth", new BearerAuth());
+//                        });
+//                    }
                 });
             });
 

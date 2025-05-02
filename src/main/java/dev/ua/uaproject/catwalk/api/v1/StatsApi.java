@@ -29,9 +29,6 @@ public class StatsApi {
             path = "/v1/stats/summary",
             summary = "Get server statistics summary",
             tags = {"Stats"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
             responses = {
                     @OpenApiResponse(status = "200", content = @OpenApiContent(type = "application/json"))
             }
@@ -48,9 +45,6 @@ public class StatsApi {
             path = "/v1/stats/online",
             summary = "Get online players data for the past week",
             tags = {"Stats"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
             queryParams = {
                     @OpenApiParam(name = "days", type = Integer.class, description = "Number of days of data to return (max 14, default 7)")
             },
@@ -86,9 +80,7 @@ public class StatsApi {
             path = "/v1/stats/topplayers",
             summary = "Get most active players by playtime",
             tags = {"Stats"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             queryParams = {
                     @OpenApiParam(name = "limit", type = Integer.class, description = "Number of players to return (default 10)")
             },
@@ -117,9 +109,7 @@ public class StatsApi {
             path = "/v1/stats/hourly",
             summary = "Get current hourly player distribution",
             tags = {"Stats"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             responses = {
                     @OpenApiResponse(status = "200", content = @OpenApiContent(type = "application/json"))
             }

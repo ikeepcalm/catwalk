@@ -36,9 +36,7 @@ public class WorldApi {
             summary = "Triggers a world save of all worlds",
             methods = {HttpMethod.POST},
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             responses = {
                     @OpenApiResponse(status = "200")
             }
@@ -66,9 +64,7 @@ public class WorldApi {
             summary = "Triggers a world save",
             methods = {HttpMethod.POST},
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             pathParams = {
                     @OpenApiParam(name = "uuid", description = "The UUID of the World to save")
             },
@@ -136,9 +132,7 @@ public class WorldApi {
             path = "/v1/worlds",
             summary = "Get information about all worlds",
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             responses = {
                     @OpenApiResponse(status = "200", content = @OpenApiContent(from = World.class))
             }
@@ -154,9 +148,7 @@ public class WorldApi {
             path = "/v1/worlds/{uuid}",
             summary = "Get information about a specific world",
             tags = {"Server"},
-            headers = {
-                    @OpenApiParam(name = "key")
-            },
+
             pathParams = {
                     @OpenApiParam(name = "uuid", description = "The uuid of the world")
             },
