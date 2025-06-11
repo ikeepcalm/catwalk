@@ -208,6 +208,10 @@ public class ServerApi {
     )
 
     public void scoreboardGet(Context ctx) {
+        if (scoreboardManager == null) {
+            throw new ServiceUnavailableResponse("Scoreboard manager is not initialized");
+        }
+
         org.bukkit.scoreboard.Scoreboard gameScoreboard = scoreboardManager.getMainScoreboard();
         Scoreboard scoreboardModel = new Scoreboard();
         Set<String> objectives = new HashSet<>();
@@ -235,6 +239,10 @@ public class ServerApi {
             }
     )
     public void objectiveGet(Context ctx) {
+        if (scoreboardManager == null) {
+            throw new ServiceUnavailableResponse("Scoreboard manager is not initialized");
+        }
+
         String objectiveName = ctx.pathParam("name");
         org.bukkit.scoreboard.Scoreboard gameScoreboard = scoreboardManager.getMainScoreboard();
         org.bukkit.scoreboard.Objective objective = gameScoreboard.getObjective(objectiveName);
