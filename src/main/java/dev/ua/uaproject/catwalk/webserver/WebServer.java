@@ -5,7 +5,6 @@ import dev.ua.uaproject.catwalk.utils.json.GsonJsonMapper;
 import io.javalin.Javalin;
 import io.javalin.community.ssl.SslPlugin;
 import io.javalin.config.JavalinConfig;
-import io.javalin.http.Context;
 import io.javalin.http.Handler;
 import io.javalin.http.HandlerType;
 import io.javalin.http.UnauthorizedResponse;
@@ -14,8 +13,8 @@ import io.javalin.openapi.plugin.OpenApiPlugin;
 import io.javalin.openapi.plugin.redoc.ReDocPlugin;
 import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 import io.javalin.websocket.WsConfig;
+import lombok.Getter;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -30,13 +29,17 @@ public class WebServer {
 
     public static final String X_CATWALK_COOKIE = "x-catwalk-key";
     public static final String X_CATWALK_BEARER = "Bearer ";
-    private static final String[] noAuthPaths = new String[]{"/swagger", "/openapi", "/webjars", "/redoc", "/plugins"};
+    private static final String[] noAuthPaths = new String[]{"/swagger", "/openapi", "/redoc"};
 
     private final Logger log;
+    @Getter
     private final Javalin javalin;
 
     private final boolean isDebug;
+
     private final List<String> blockedPaths;
+    private final List<String> whitelistedPaths;
+
     private final boolean isAuthEnabled;
     private final boolean disableSwagger;
     private final boolean tlsEnabled;
@@ -47,12 +50,14 @@ public class WebServer {
     private final List<String> corsOrigin;
     private final int securePort;
 
+    @Getter
     private OpenApiPlugin openApiPlugin;
 
     public WebServer(CatWalkMain main, FileConfiguration bukkitConfig, Logger logger) {
         this.log = logger;
         this.isDebug = bukkitConfig.getBoolean("debug", false);
         this.blockedPaths = bukkitConfig.getStringList("blocked-paths");
+        this.whitelistedPaths = bukkitConfig.getStringList("whitelisted-paths");
         this.isAuthEnabled = bukkitConfig.getBoolean("useKeyAuth", true);
         this.disableSwagger = bukkitConfig.getBoolean("disable-swagger", false);
         this.tlsEnabled = bukkitConfig.getBoolean("tls.enabled", false);
@@ -65,46 +70,42 @@ public class WebServer {
 
         this.javalin = Javalin.create(config -> configureJavalin(config, main));
 
-        this.javalin.beforeMatched(new Handler() {
-            @Override
-            public void handle(@NotNull Context ctx) throws Exception {
-                if (!isAuthEnabled) {
-                    return;
-                }
-
-                if (isNoAuthPath(ctx.req().getPathInfo())) {
-                    return;
-                }
-
-                String authHeader = ctx.header("Authorization");
-
-                // Check for bearer token
-                if (authHeader != null && authHeader.startsWith(X_CATWALK_BEARER)) {
-                    String token = authHeader.substring(7);
-                    if (Objects.equals(token, authKey)) {
-                        if (isDebug) {
-                            log.info("[CatWalk] Auth successful via Bearer token for: " + ctx.req().getPathInfo());
-                        }
-                        return;
-                    } else {
-                        log.warning("[CatWalk] Invalid Bearer token provided: " + token.substring(0, Math.min(token.length(), 5)) + "...");
-                    }
-                }
-
-                // Check for auth cookie
-                String authCookie = ctx.cookie(X_CATWALK_COOKIE);
-                if (authCookie != null && Objects.equals(authCookie, authKey)) {
-                    if (isDebug) {
-                        log.info("[CatWalk] Auth successful via cookie for: " + ctx.req().getPathInfo());
-                    }
-                    return;
-                }
-
-                // Auth failed, log detailed message
-                log.warning("[CatWalk] Unauthorized request: " + ctx.req().getPathInfo() +
-                        " - Authorization header: " + (authHeader != null ? "present" : "missing"));
-                throw new UnauthorizedResponse("Authentication required. Use Bearer token authentication.");
+        this.javalin.beforeMatched(ctx -> {
+            if (!isAuthEnabled) {
+                return;
             }
+
+            if (isNoAuthPath(ctx.req().getPathInfo())) {
+                return;
+            }
+
+            String authHeader = ctx.header("Authorization");
+
+            if (authHeader != null && authHeader.startsWith(X_CATWALK_BEARER)) {
+                String token = authHeader.substring(7);
+                if (Objects.equals(token, authKey)) {
+                    if (isDebug) {
+                        log.info("[CatWalk] Auth successful via Bearer token for: " + ctx.req().getPathInfo());
+                    }
+                    return;
+                } else {
+                    log.warning("[CatWalk] Invalid Bearer token provided: " + token.substring(0, Math.min(token.length(), 5)) + "...");
+                }
+            }
+
+            // Check for auth cookie
+            String authCookie = ctx.cookie(X_CATWALK_COOKIE);
+            if (authCookie != null && Objects.equals(authCookie, authKey)) {
+                if (isDebug) {
+                    log.info("[CatWalk] Auth successful via cookie for: " + ctx.req().getPathInfo());
+                }
+                return;
+            }
+
+            // Auth failed, log detailed message
+            log.warning("[CatWalk] Unauthorized request: " + ctx.req().getPathInfo() +
+                    " - Authorization header: " + (authHeader != null ? "present" : "missing"));
+            throw new UnauthorizedResponse("Authentication required. Use Bearer token authentication.");
         });
 
         javalin.get("/swagger", ctx -> ctx.redirect("/swagger.html"));
@@ -174,8 +175,10 @@ public class WebServer {
         }
     }
 
-    private static boolean isNoAuthPath(String requestPath) {
-        return Arrays.stream(noAuthPaths).anyMatch(requestPath::startsWith);
+    private boolean isNoAuthPath(String requestPath) {
+        return Arrays.stream(noAuthPaths).anyMatch(requestPath::startsWith)
+                ||
+                (whitelistedPaths != null && whitelistedPaths.stream().anyMatch(requestPath::startsWith));
     }
 
     private void configureCors(JavalinConfig config) {
@@ -201,7 +204,6 @@ public class WebServer {
             final String fullKeystorePath = main.getDataFolder().getAbsolutePath() + File.separator + keyStorePath;
 
             if (Files.exists(Paths.get(fullKeystorePath))) {
-                // Register the SSL plugin
                 SslPlugin plugin = new SslPlugin(conf -> {
                     conf.keystoreFromPath(fullKeystorePath, keyStorePassword);
                     conf.http2 = false;
@@ -238,10 +240,6 @@ public class WebServer {
         this.addRoute(HandlerType.DELETE, route, handler);
     }
 
-    public OpenApiPlugin getOpenApiPlugin() {
-        return this.openApiPlugin;
-    }
-
     public void addRoute(HandlerType httpMethod, String route, Handler handler) {
         // Checks to see if passed route is blocked in the config.
         // Note: The second check is for any blocked routes that start with a /
@@ -264,7 +262,4 @@ public class WebServer {
         this.javalin.stop();
     }
 
-    public Javalin getJavalin() {
-        return this.javalin;
-    }
 }
