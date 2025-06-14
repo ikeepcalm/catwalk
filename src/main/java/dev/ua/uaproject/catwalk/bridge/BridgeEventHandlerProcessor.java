@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.bridge.annotations.BridgeEventHandler;
 import dev.ua.uaproject.catwalk.bridge.annotations.BridgePathParam;
-import dev.ua.uaproject.catwalk.utils.GsonSingleton;
+import dev.ua.uaproject.catwalk.utils.json.GsonSingleton;
 import dev.ua.uaproject.catwalk.webserver.WebServer;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;

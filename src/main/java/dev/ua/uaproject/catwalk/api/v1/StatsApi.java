@@ -1,6 +1,6 @@
 package dev.ua.uaproject.catwalk.api.v1;
 
-import dev.ua.uaproject.catwalk.api.v1.stats.StatsManager;
+import dev.ua.uaproject.catwalk.stats.StatsManager;
 import dev.ua.uaproject.catwalk.utils.LagDetector;
 import io.javalin.http.Context;
 import io.javalin.openapi.OpenApi;
@@ -8,8 +8,6 @@ import io.javalin.openapi.OpenApiContent;
 import io.javalin.openapi.OpenApiParam;
 import io.javalin.openapi.OpenApiResponse;
 
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

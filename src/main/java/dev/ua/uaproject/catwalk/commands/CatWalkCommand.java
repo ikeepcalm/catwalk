@@ -60,7 +60,7 @@ public class CatWalkCommand implements CommandExecutor, TabCompleter {
             return null;
         }
         ArrayList<String> completions = new ArrayList<>();
-        if (args.length == 0 || (args.length == 1 && args[0].length() == 0)) {
+        if (args.length == 0 || (args.length == 1 && args[0].isEmpty())) {
             completions.add("reload");
             completions.add("info");
         }

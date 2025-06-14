@@ -1,7 +1,7 @@
 package dev.ua.uaproject.catwalk.webserver;
 
 import dev.ua.uaproject.catwalk.CatWalkMain;
-import dev.ua.uaproject.catwalk.utils.GsonJsonMapper;
+import dev.ua.uaproject.catwalk.utils.json.GsonJsonMapper;
 import io.javalin.Javalin;
 import io.javalin.community.ssl.SslPlugin;
 import io.javalin.config.JavalinConfig;
@@ -10,9 +10,7 @@ import io.javalin.http.Handler;
 import io.javalin.http.HandlerType;
 import io.javalin.http.UnauthorizedResponse;
 import io.javalin.http.staticfiles.Location;
-import io.javalin.openapi.BearerAuth;
 import io.javalin.openapi.plugin.OpenApiPlugin;
-import io.javalin.openapi.plugin.SecurityComponentConfiguration;
 import io.javalin.openapi.plugin.redoc.ReDocPlugin;
 import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 import io.javalin.websocket.WsConfig;

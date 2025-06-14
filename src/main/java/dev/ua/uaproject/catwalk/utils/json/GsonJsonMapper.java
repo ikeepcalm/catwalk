@@ -1,4 +1,4 @@
-package dev.ua.uaproject.catwalk.utils;
+package dev.ua.uaproject.catwalk.utils.json;
 
 import org.jetbrains.annotations.NotNull;
 

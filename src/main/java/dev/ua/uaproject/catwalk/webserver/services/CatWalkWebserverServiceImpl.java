@@ -1,9 +1,8 @@
-package dev.ua.uaproject.catwalk.webserver.catwalk.impl;
+package dev.ua.uaproject.catwalk.webserver.services;
 
 import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.bridge.BridgeEventHandlerProcessor;
 import dev.ua.uaproject.catwalk.webserver.WebServer;
-import dev.ua.uaproject.catwalk.webserver.catwalk.CatWalkWebserverService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.Handler;

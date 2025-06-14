@@ -1,4 +1,4 @@
-package dev.ua.uaproject.catwalk.webserver.catwalk;
+package dev.ua.uaproject.catwalk.webserver.services;
 
 import io.javalin.Javalin;
 import io.javalin.http.Context;

@@ -39,12 +39,6 @@ public class BridgeApiResponse<T> {
     public T data;
 
     /**
-     * HTTP status code of the response
-     * Typically 200 for success, 4xx for client errors, 5xx for server errors
-     */
-    public int statusCode;
-
-    /**
      * Creates a successful response with data and a default message
      */
     public static <T> BridgeApiResponse<T> success(T data) {
@@ -59,7 +53,6 @@ public class BridgeApiResponse<T> {
                 .success(true)
                 .message(message)
                 .data(data)
-                .statusCode(HttpStatus.OK.getCode())
                 .build();
     }
 
@@ -70,7 +63,6 @@ public class BridgeApiResponse<T> {
         return BridgeApiResponse.<T>builder()
                 .success(true)
                 .message(message)
-                .statusCode(HttpStatus.OK.getCode())
                 .build();
     }
 
@@ -88,7 +80,6 @@ public class BridgeApiResponse<T> {
         return BridgeApiResponse.<T>builder()
                 .success(false)
                 .message(message)
-                .statusCode(status.getCode())
                 .build();
     }
 
@@ -100,7 +91,6 @@ public class BridgeApiResponse<T> {
                 .success(false)
                 .message(message)
                 .data(data)
-                .statusCode(status.getCode())
                 .build();
     }
 }
