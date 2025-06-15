@@ -29,7 +29,7 @@ public class WebServer {
 
     public static final String X_CATWALK_COOKIE = "x-catwalk-key";
     public static final String X_CATWALK_BEARER = "Bearer ";
-    private static final String[] noAuthPaths = new String[]{"/swagger", "/openapi", "/redoc"};
+    private static final String[] noAuthPaths = new String[]{"/swagger", "/openapi", "/redoc", "/plugins"};
 
     private final Logger log;
     @Getter
@@ -176,9 +176,28 @@ public class WebServer {
     }
 
     private boolean isNoAuthPath(String requestPath) {
-        return Arrays.stream(noAuthPaths).anyMatch(requestPath::startsWith)
-                ||
-                (whitelistedPaths != null && whitelistedPaths.stream().anyMatch(requestPath::startsWith));
+        if (Arrays.stream(noAuthPaths).anyMatch(requestPath::startsWith)) {
+            return true;
+        }
+
+        if (whitelistedPaths != null) {
+            for (String pattern : whitelistedPaths) {
+                if (pattern.endsWith("*")) {
+                    String prefix = pattern.substring(0, pattern.length() - 1);
+                    if (requestPath.startsWith(prefix)) {
+                        return true;
+                    }
+                } else if (pattern.contains("{") && pattern.contains("}")) {
+                    String regex = pattern.replaceAll("\\{[^/]+}", "[^/]+");
+                    if (requestPath.matches(regex)) {
+                        return true;
+                    }
+                } else if (requestPath.equals(pattern)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void configureCors(JavalinConfig config) {
