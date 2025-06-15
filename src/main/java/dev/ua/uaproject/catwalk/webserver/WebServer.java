@@ -102,9 +102,6 @@ public class WebServer {
                 return;
             }
 
-            // Auth failed, log detailed message
-            log.warning("[CatWalk] Unauthorized request: " + ctx.req().getPathInfo() +
-                    " - Authorization header: " + (authHeader != null ? "present" : "missing"));
             throw new UnauthorizedResponse("Authentication required. Use Bearer token authentication.");
         });
 
