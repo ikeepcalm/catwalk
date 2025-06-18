@@ -215,9 +215,79 @@ public class WebServer {
                                 plugins: [
                                     SwaggerUIBundle.plugins.DownloadUrl
                                 ],
-                                layout: "StandaloneLayout"
+                                layout: "StandaloneLayout",
+                                // Enable authorization persistence
+                                persistAuthorization: true,
+                                // Enable request/response body editors
+                                tryItOutEnabled: true,
+                                // Enable default request body for POST methods
+                                defaultModelsExpandDepth: 1,
+                                defaultModelExpandDepth: 1,
+                                // Pre-populate auth from localStorage
+                                onComplete: function() {
+                                    // Restore saved authorization
+                                    const savedAuth = localStorage.getItem('swagger-bearer-auth');
+                                    if (savedAuth) {
+                                        ui.preauthorizeApiKey('bearerAuth', savedAuth);
+                                    }
+                                },
+                                // Intercept auth changes to save them
+                                requestInterceptor: function(request) {
+                                    // Save bearer token when it's used
+                                    if (request.headers && request.headers.Authorization && request.headers.Authorization.startsWith('Bearer ')) {
+                                        const token = request.headers.Authorization.substring(7);
+                                        localStorage.setItem('swagger-bearer-auth', token);
+                                    }
+                                    return request;
+                                }
                             });
+                            
+                            // Override the authorize function to save tokens
+                            setTimeout(function() {
+                                enhanceAuthorizeButton(ui);
+                            }, 1000);
                         };
+                        
+                        function enhanceAuthorizeButton(ui) {
+                            // Find and enhance the authorize button
+                            const observer = new MutationObserver(function(mutations) {
+                                const authorizeBtn = document.querySelector('.btn.authorize');
+                                if (authorizeBtn && !authorizeBtn.dataset.enhanced) {
+                                    authorizeBtn.dataset.enhanced = 'true';
+                                    
+                                    // Override click to save auth data
+                                    authorizeBtn.addEventListener('click', function() {
+                                        setTimeout(function() {
+                                            const authModal = document.querySelector('.auth-container');
+                                            if (authModal) {
+                                                const authInput = authModal.querySelector('input[type="text"], input[type="password"]');
+                                                const authorizeModalBtn = authModal.querySelector('.btn.authorize');
+                                                
+                                                if (authorizeModalBtn && !authorizeModalBtn.dataset.enhanced) {
+                                                    authorizeModalBtn.dataset.enhanced = 'true';
+                                                    
+                                                    authorizeModalBtn.addEventListener('click', function() {
+                                                        setTimeout(function() {
+                                                            if (authInput && authInput.value) {
+                                                                localStorage.setItem('swagger-bearer-auth', authInput.value);
+                                                            }
+                                                        }, 100);
+                                                    });
+                                                }
+                                                
+                                                // Pre-fill saved token
+                                                const savedToken = localStorage.getItem('swagger-bearer-auth');
+                                                if (savedToken && authInput && !authInput.value) {
+                                                    authInput.value = savedToken;
+                                                }
+                                            }
+                                        }, 100);
+                                    });
+                                }
+                            });
+                            
+                            observer.observe(document.body, { childList: true, subtree: true });
+                        }
                     </script>
                 </body>
                 </html>
@@ -246,10 +316,61 @@ public class WebServer {
     }
 
     /**
-     * Register a handler instance for OpenAPI scanning
+     * Register a handler instance for OpenAPI scanning and route registration
      */
     public void registerHandlerInstance(Object handlerInstance, String pluginName) {
         openApiGenerator.registerHandlerInstance(handlerInstance, pluginName);
+        registerAnnotatedRoutes(handlerInstance);
+    }
+
+    /**
+     * Register HTTP routes from @OpenApi annotated methods
+     */
+    private void registerAnnotatedRoutes(Object handlerInstance) {
+        Class<?> clazz = handlerInstance.getClass();
+        
+        for (java.lang.reflect.Method method : clazz.getDeclaredMethods()) {
+            io.javalin.openapi.OpenApi openApiAnnotation = method.getAnnotation(io.javalin.openapi.OpenApi.class);
+            if (openApiAnnotation == null) continue;
+            
+            io.javalin.openapi.HttpMethod[] httpMethods = openApiAnnotation.methods().length > 0 ?
+                    openApiAnnotation.methods() :
+                    new io.javalin.openapi.HttpMethod[]{io.javalin.openapi.HttpMethod.GET};
+            
+            for (io.javalin.openapi.HttpMethod httpMethod : httpMethods) {
+                HandlerType handlerType = convertHttpMethodToHandlerType(httpMethod);
+                String path = openApiAnnotation.path();
+                
+                Handler handler = ctx -> {
+                    try {
+                        method.setAccessible(true);
+                        method.invoke(handlerInstance, ctx);
+                    } catch (Exception e) {
+                        log.severe("Error invoking handler method " + method.getName() + ": " + e.getMessage());
+                        ctx.status(500).result("Internal server error");
+                    }
+                };
+                
+                addRoute(handlerType, path, handler);
+                log.info("Registered " + handlerType + " route: " + path);
+            }
+        }
+    }
+
+    /**
+     * Convert OpenAPI HttpMethod to Javalin HandlerType
+     */
+    private HandlerType convertHttpMethodToHandlerType(io.javalin.openapi.HttpMethod httpMethod) {
+        return switch (httpMethod) {
+            case GET -> HandlerType.GET;
+            case POST -> HandlerType.POST;
+            case PUT -> HandlerType.PUT;
+            case DELETE -> HandlerType.DELETE;
+            case PATCH -> HandlerType.PATCH;
+            case HEAD -> HandlerType.HEAD;
+            case OPTIONS -> HandlerType.OPTIONS;
+            default -> HandlerType.GET; // Default to GET for unknown methods
+        };
     }
 
     /**

@@ -74,30 +74,6 @@ public final class WebServerRoutes {
         log.info("Basic routes registered");
     }
 
-    // NEW - Register hub routes with proper OpenAPI
-    public static void addHubRoutes(CatWalkMain main, Logger log, WebServer webServer) {
-        log.info("Basic routes registered");
-
-        webServer.get("/v1/network/status", ctx -> {
-            java.util.Map<String, Object> status = new java.util.HashMap<>();
-            status.put("hubServer", main.getServerId());
-            status.put("mode", "Hub Gateway");
-            status.put("timestamp", System.currentTimeMillis());
-            status.put("status", "active");
-            ctx.json(status);
-        });
-
-        webServer.get("/v1/network/servers", ctx -> {
-            java.util.Map<String, Object> servers = new java.util.HashMap<>();
-            servers.put("hub", main.getServerId());
-            servers.put("totalServers", 1);
-            servers.put("activeServers", 1);
-            ctx.json(servers);
-        });
-
-        log.info("Hub routes registered");
-    }
-
     private record PrefixedRouteBuilder(String prefix, WebServer webServer) {
 
         public void get(String route, Handler handler) {

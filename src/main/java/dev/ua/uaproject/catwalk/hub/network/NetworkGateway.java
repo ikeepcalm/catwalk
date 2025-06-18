@@ -1,6 +1,7 @@
 package dev.ua.uaproject.catwalk.hub.network;
 
 import com.google.gson.Gson;
+import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.common.database.DatabaseManager;
 import dev.ua.uaproject.catwalk.common.database.model.EndpointDefinition;
 import dev.ua.uaproject.catwalk.common.database.model.NetworkRequest;
@@ -43,6 +44,7 @@ public class NetworkGateway {
         this.gson = new Gson();
 
         startResponsePolling();
+
         log.info("[DatabaseHubGateway] Hub gateway initialized");
     }
 
@@ -65,9 +67,6 @@ public class NetworkGateway {
             log.info("[DatabaseHubGateway] Registered {} proxy routes for {} servers",
                     totalEndpoints, addonsByServer.size());
         });
-
-        // Register network management routes
-        registerNetworkManagementRoutes();
     }
 
     private void registerProxyRoute(String serverId, String addonName, EndpointDefinition endpoint) {
@@ -97,10 +96,12 @@ public class NetworkGateway {
         }
     }
 
-    private void registerNetworkManagementRoutes() {
-        // Network status endpoint
+    public void registerNetworkManagementRoutes() {
         webServer.get("/v1/network/status", ctx -> {
-            networkRegistry.getAllServers().thenAccept(servers -> {
+            try {
+                // Use .get() to wait for the future to complete
+                var servers = networkRegistry.getAllServers().get();
+                
                 Map<String, Object> status = new HashMap<>();
                 status.put("hubServer", networkRegistry.getCurrentServerId());
                 status.put("timestamp", System.currentTimeMillis());
@@ -110,33 +111,33 @@ public class NetworkGateway {
                         s.getStatus().name().equals("ONLINE") ? 1 : 0).sum());
 
                 ctx.json(status);
-            }).exceptionally(throwable -> {
-                log.error("[DatabaseHubGateway] Failed to get network status", throwable);
-                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .json(Map.of("error", "Failed to retrieve network status"));
-                return null;
-            });
+            } catch (Exception e) {
+                log.error("[DatabaseHubGateway] Error in network status endpoint", e);
+                ctx.status(500).json(Map.of("error", "Failed to retrieve network status: " + e.getMessage()));
+            }
         });
 
         // Network servers endpoint
         webServer.get("/v1/network/servers", ctx -> {
-            networkRegistry.getAllServers().thenAccept(servers -> {
+            try {
+                var servers = networkRegistry.getAllServers().get();
+                
                 Map<String, Object> response = new HashMap<>();
                 response.put("servers", servers);
                 response.put("totalCount", servers.size());
 
                 ctx.json(response);
-            }).exceptionally(throwable -> {
-                log.error("[DatabaseHubGateway] Failed to get network servers", throwable);
-                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .json(Map.of("error", "Failed to retrieve network servers"));
-                return null;
-            });
+            } catch (Exception e) {
+                log.error("[DatabaseHubGateway] Error in network servers endpoint", e);
+                ctx.status(500).json(Map.of("error", "Failed to retrieve network servers: " + e.getMessage()));
+            }
         });
 
         // Network addons endpoint
         webServer.get("/v1/network/addons", ctx -> {
-            networkRegistry.getAllNetworkAddons().thenAccept(addonsByServer -> {
+            try {
+                var addonsByServer = networkRegistry.getAllNetworkAddons().get();
+                
                 Map<String, Object> response = new HashMap<>();
                 response.put("addonsByServer", addonsByServer);
 
@@ -145,31 +146,45 @@ public class NetworkGateway {
                 response.put("totalAddons", totalAddons);
 
                 ctx.json(response);
-            }).exceptionally(throwable -> {
-                log.error("[DatabaseHubGateway] Failed to get network addons", throwable);
-                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .json(Map.of("error", "Failed to retrieve network addons"));
-                return null;
-            });
+            } catch (Exception e) {
+                log.error("[DatabaseHubGateway] Error in network addons endpoint", e);
+                ctx.status(500).json(Map.of("error", "Failed to retrieve network addons: " + e.getMessage()));
+            }
         });
 
         // Server-specific addon endpoint
         webServer.get("/v1/network/servers/{serverId}/addons", ctx -> {
-            String serverId = ctx.pathParam("serverId");
-
-            networkRegistry.getServerAddons(serverId).thenAccept(addons -> {
+            try {
+                String serverId = ctx.pathParam("serverId");
+                var addons = networkRegistry.getServerAddons(serverId).get();
+                
                 Map<String, Object> response = new HashMap<>();
                 response.put("serverId", serverId);
                 response.put("addons", addons);
                 response.put("count", addons.size());
 
                 ctx.json(response);
-            }).exceptionally(throwable -> {
-                log.error("[DatabaseHubGateway] Failed to get addons for server {}", serverId, throwable);
-                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .json(Map.of("error", "Failed to retrieve server addons"));
-                return null;
-            });
+            } catch (Exception e) {
+                log.error("[DatabaseHubGateway] Error in server addons endpoint", e);
+                ctx.status(500).json(Map.of("error", "Failed to retrieve server addons: " + e.getMessage()));
+            }
+        });
+
+        // Debug endpoint to test basic functionality
+        webServer.get("/v1/network/debug", ctx -> {
+            try {
+                Map<String, Object> debug = new HashMap<>();
+                debug.put("isHubMode", CatWalkMain.instance.isHubMode());
+                debug.put("currentServerId", networkRegistry.getCurrentServerId());
+                debug.put("timestamp", System.currentTimeMillis());
+                debug.put("databaseConnected", databaseManager != null);
+                debug.put("message", "Network debug endpoint working");
+                
+                ctx.json(debug);
+            } catch (Exception e) {
+                log.error("[DatabaseHubGateway] Error in debug endpoint", e);
+                ctx.status(500).json(Map.of("error", "Debug endpoint failed: " + e.getMessage()));
+            }
         });
 
         log.info("[DatabaseHubGateway] Registered network management routes");

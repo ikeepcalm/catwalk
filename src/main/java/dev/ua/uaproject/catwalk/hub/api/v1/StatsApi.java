@@ -116,4 +116,47 @@ public class StatsApi {
         Map<String, Integer> hourlyDistribution = statsManager.getCurrentHourlyDistribution();
         ctx.json(hourlyDistribution);
     }
+
+    @OpenApi(
+            path = "/v1/stats/test",
+            methods = {io.javalin.openapi.HttpMethod.POST},
+            summary = "Test endpoint for POST requests with body",
+            tags = {"Stats"},
+            requestBody = @io.javalin.openapi.OpenApiRequestBody(
+                    description = "Test data to process",
+                    required = true,
+                    content = @OpenApiContent(
+                            type = "application/json",
+                            example = """
+                                    {
+                                        "message": "Hello from client",
+                                        "data": {
+                                            "key": "value",
+                                            "number": 42
+                                        }
+                                    }
+                                    """
+                    )
+            ),
+            responses = {
+                    @OpenApiResponse(status = "200", content = @OpenApiContent(type = "application/json")),
+                    @OpenApiResponse(status = "400", description = "Invalid request body")
+            }
+    )
+    public void testPostEndpoint(Context ctx) {
+        try {
+            // Parse the JSON body
+            String requestBody = ctx.body();
+            
+            // Create response
+            Map<String, Object> response = new HashMap<>();
+            response.put("received", requestBody);
+            response.put("timestamp", System.currentTimeMillis());
+            response.put("message", "Successfully processed POST request");
+            
+            ctx.json(response);
+        } catch (Exception e) {
+            ctx.status(400).json(Map.of("error", "Invalid JSON body: " + e.getMessage()));
+        }
+    }
 }

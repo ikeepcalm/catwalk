@@ -23,6 +23,10 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 public class CatWalkMain extends JavaPlugin {
 
     private static java.util.logging.Logger log;
@@ -166,12 +170,10 @@ public class CatWalkMain extends JavaPlugin {
 
     private void registerCoreApiRoutes() {
         ApiV1Initializer api = new ApiV1Initializer(this, log, lagDetector, statsManager);
-        registerStatsApi(api);
-
         WebServerRoutes.addBasicRoutes(this, log, app);
-
-        if (isHubMode) {
-            WebServerRoutes.addHubRoutes(this, log, app); // hubGateway handles proxy routes
+        registerStatsApi(api);
+        if (isHubMode){
+            hubGateway.registerNetworkManagementRoutes();
         }
     }
 

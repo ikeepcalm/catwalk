@@ -475,12 +475,22 @@ public class CustomOpenApiGenerator {
         // Request body
         if (annotation.requestBody() != null && annotation.requestBody().content().length > 0) {
             JsonObject requestBody = new JsonObject();
+            
+            // Add description if provided
+            if (!annotation.requestBody().description().isEmpty()) {
+                requestBody.addProperty("description", annotation.requestBody().description());
+            }
+            
+            // Add required flag
+            requestBody.addProperty("required", annotation.requestBody().required());
+            
             JsonObject content = new JsonObject();
 
             for (OpenApiContent contentItem : annotation.requestBody().content()) {
                 JsonObject mediaType = new JsonObject();
                 JsonObject schema = new JsonObject();
 
+                // Handle schema type
                 try {
                     Class<?> typeClass = Class.forName(contentItem.type());
                     if (!typeClass.equals(Object.class)) {
@@ -493,6 +503,19 @@ public class CustomOpenApiGenerator {
                 }
 
                 mediaType.add("schema", schema);
+                
+                // Add example if provided
+                if (!contentItem.example().isEmpty()) {
+                    try {
+                        // Parse the example as JSON to ensure it's valid
+                        com.google.gson.JsonElement exampleJson = com.google.gson.JsonParser.parseString(contentItem.example());
+                        mediaType.add("example", exampleJson);
+                    } catch (Exception e) {
+                        // If parsing fails, add as string
+                        mediaType.addProperty("example", contentItem.example());
+                    }
+                }
+                
                 content.add(contentItem.mimeType(), mediaType);
             }
 

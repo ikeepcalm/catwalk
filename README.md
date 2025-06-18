@@ -1,203 +1,176 @@
-# ServerTap
+# CatWalk
 
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/servertap-io/servertap/build.yml?branch=main)](https://github.com/servertap-io/servertap/actions/workflows/build.yml)
-![Bukkit Version](https://img.shields.io/badge/bukkit%20version-%3E%3D1.16-brightgreen)
-![GitHub All Releases](https://img.shields.io/github/downloads/servertap-io/servertap/total?color=brightgreen)
-[![Discord](https://img.shields.io/discord/919982507271802890?logo=discord&label=Discord&color=brightgreen)](https://discord.gg/nSWRYzBMfp)
+[![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://www.oracle.com/java/)
+[![Paper](https://img.shields.io/badge/Paper-1.21.4-blue.svg)](https://papermc.io/)
+[![Gradle](https://img.shields.io/badge/Gradle-8.x-green.svg)](https://gradle.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-ServerTap is a REST API for Bukkit, Spigot, and PaperMC Minecraft servers. It allows server admins to query and interact with their servers using simple REST semantics.
+**CatWalk** is a sophisticated REST API plugin for Minecraft servers that provides network gateway capabilities, cross-server communication, and comprehensive server management through a unified API interface.
 
-Download the latest release: [Releases](https://github.com/servertap-io/servertap/releases/latest)
+## 🌟 Features
 
----
+### Network Gateway Architecture
+- **Hub Gateway Mode**: Acts as a central proxy for multiple Minecraft servers
+- **Backend Server Mode**: Individual server with local API endpoints
+- **Database-driven Server Discovery**: Automatic server registration and heartbeat monitoring
+- **Cross-server Request Routing**: Intelligent request forwarding and load balancing
 
-## Table of Contents
+### REST API & Documentation
+- **Statistics API**: Player activity, server metrics, TPS monitoring
+- **OpenAPI 3.0 Specification**: Auto-generated Swagger UI documentation
+- **WebSocket Support**: Real-time console streaming
+- **Custom Addon System**: Dynamic endpoint registration for third-party plugins
 
-- [Features](#features)
-- [Installation](#installation)
-- [Commands](#commands)
-- [Endpoints](#endpoints)
-- [Configuration](#configuration)
-  - [TLS](#tls)
-  - [Authentication](#authentication)
-  - [CORS](#cors)
-  - [Webhooks](#webhooks)
-  - [Websockets](#websockets)
-- [Developer API](#developer-api)
-- [Contributing](#contributing)
-- [Community and Support](#community-and-support)
+### Security & Performance
+- **API Key Authentication**: Secure access control with whitelisted paths
+- **TLS/SSL Support**: Custom keystore configuration
+- **CORS Configuration**: Web application integration
+- **Connection Pooling**: HikariCP for optimal database performance
 
----
+## 🚀 Quick Start
 
-## Features
+### Prerequisites
+- Java 21 or higher
+- PaperMC 1.21.4+ server
+- MariaDB/MySQL database
+- Gradle 8.x (for building)
 
-- REST API for managing players, worlds, and plugins
-- Webhooks for server events like player join/quit
-- Real-time server logs through Websockets
-- Extendable with custom endpoints via the Developer API
+### Installation
 
----
-
-## Installation
-
-1. Download the latest `ServerTap` plugin JAR from the [Releases page](https://github.com/servertap-io/servertap/releases/latest).
-2. Place the JAR in your server's `plugins/` directory.
-3. Restart your server.
-
-To test the API, use tools like `curl`, Postman, or any HTTP client.
-
----
-
-## Commands
-
-ServerTap supports the following commands:
-
-- `/servertap reload`: Reloads the plugin configuration.
-- `/servertap info`: Displays plugin information.
-
-**Permission:** `servertap.admin`
-
----
-
-## Endpoints
-
-View the full API documentation at [http://your-server.net:4567/swagger](http://your-server.net:4567/swagger).
-
-Example API usage:
-
-```bash
-curl http://localhost:4567/v1/server
-```
-
-Response:
-```json
-{
-  "name": "Paper",
-  "version": "git-Paper-89 (MC: 1.15.2)",
-  "health": {
-    "cpus": 4,
-    "uptime": 744,
-    "freeMemory": 1332389360
-  }
-}
-```
-
----
-
-## Configuration
-
-### TLS
-
-Enable encrypted communication by configuring TLS in `config.yml`:
-
-```yaml
-tls:
-  enabled: true
-  keystore: selfsigned.jks
-  keystorePassword: change_me
-```
-
-Generate a keystore with:
-```bash
-keytool -genkey -keyalg RSA -alias servertap -keystore selfsigned.jks -validity 365 -keysize 2048
-```
-
-### Authentication
-
-Add key-based authentication by updating `config.yml`:
-
-```yaml
-useKeyAuth: true
-key: some-long-super-random-string
-```
-
-Include the `key` header in API requests.
-
-### CORS
-
-Limit cross-origin requests:
-
-```yaml
-corsOrigins:
-  - https://mysite.com
-```
-
----
-
-## Webhooks
-
-Trigger external actions on server events. Example configuration:
-
-```yaml
-webhooks:
-  default:
-    listener: "https://webhook.example.com"
-    events:
-    - PlayerJoin
-    - PlayerQuit
-```
-
-Supported events:
-- `PlayerJoin`
-- `PlayerQuit`
-- `PlayerDeath`
-- `PlayerChat`
-- `PlayerKick`
-
----
-
-## Websockets
-
-Stream server logs and send commands via Websockets:
-
-```js
-const ws = new WebSocket("ws://localhost:4567/v1/ws/console");
-ws.onmessage = (event) => console.log(event.data);
-```
-
-### Authentication
-
-Set the cookie `x-servertap-key` to authenticate Websocket connections.
-
----
-
-## Developer API
-
-Extend ServerTap by registering custom endpoints or Websockets:
-
-1. Add ServerTap as a dependency via Jitpack:
-   ```xml
-   <repository>
-     <id>jitpack.io</id>
-     <url>https://jitpack.io</url>
-   </repository>
-   <dependency>
-     <groupId>com.github.servertap-io</groupId>
-     <artifactId>servertap</artifactId>
-     <version>vX.X.X</version>
-   </dependency>
+1. **Download the latest release** or build from source:
+   ```bash
+   git clone https://github.com/your-org/catwalk.git
+   cd catwalk
+   ./gradlew shadowJar
    ```
 
-2. Example usage:
-   ```java
-   ServerTapWebserverService webserver = getServer().getServicesManager().load(ServerTapWebserverService.class);
-   webserver.get("/example", ctx -> ctx.result("Hello, ServerTap!"));
+2. **Install the plugin**:
+   - Copy `build/libs/CatWalk-*.jar` to your server's `plugins/` directory
+   - Start your server to generate the configuration
+
+3. **Configure the database**:
+   ```yaml
+   # plugins/CatWalk/config.yml
+   database:
+     host: localhost
+     port: 3306
+     database: catwalk
+     username: your_username
+     password: your_password
    ```
 
+4. **Start your server** - CatWalk will automatically:
+   - Create database tables
+   - Register your server in the network
+   - Start the web server (default port: 4567)
+
+## 🏗️ Architecture
+
+### Dual Mode Operation
+
+#### Hub Gateway Mode
+```
+Client Request → Hub Gateway → Database Lookup → Target Server → Response
+```
+- Centralized entry point for all API requests
+- Automatic server discovery and routing
+- Load balancing across multiple servers
+- Cross-server communication coordination
+
+#### Backend Server Mode  
+```
+Client Request → Local Server → Local Processing → Response
+```
+- Direct API access to individual servers
+- Local endpoint registration
+- Addon-specific functionality
+- Real-time server metrics
+
+### Database Schema
+
+CatWalk uses a comprehensive database schema:
+
+- **`servers`** - Network server registry with heartbeat monitoring
+- **`server_addons`** - Addon registration and endpoint definitions  
+- **`network_requests`** - Cross-server request queue and processing
+- **`network_responses`** - Response data and metrics
+- **`request_processors`** - Custom request handling logic
+
+## 📡 API Reference
+
+### Base URL
+```
+http://your-server:4567/api/v1
+```
+
+## 🔧 Development
+
+### Building from Source
+
+```bash
+git clone https://github.com/your-org/catwalk.git
+cd catwalk
+./gradlew shadowJar
+```
+
+### Running Tests
+
+```bash
+./gradlew test
+```
+
+### Development Server
+
+```bash
+./gradlew runServer
+```
+
+This will start a test server in the `run/` directory with CatWalk pre-installed.
+
+## 📈 Roadmap
+
+- [ ] **Redis Integration** - Caching and session management
+- [ ] **Metrics Dashboard** - Web-based monitoring interface
+- [ ] **Plugin Marketplace** - Addon discovery and installation
+- [ ] **GraphQL API** - Advanced query capabilities
+- [ ] **Rate Limiting** - Request throttling and abuse prevention
+- [ ] **Kubernetes Support** - Container orchestration integration
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Development Guidelines
+
+- Follow Java code conventions
+- Write comprehensive tests
+- Update documentation for new features
+- Ensure backward compatibility
+- Use meaningful commit messages
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **PaperMC Team** - For the excellent Minecraft server platform
+- **Javalin** - For the lightweight web framework
+- **HikariCP** - For high-performance connection pooling
+- **OpenAPI** - For API documentation standards
+- **ServerTap** - For the base of the project, yet not maintained
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/your-org/catwalk/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-org/catwalk/discussions)
+- **Discord**: [Join our Discord](https://discord.gg/your-invite)
+- **Documentation**: [Wiki](https://github.com/your-org/catwalk/wiki)
+
 ---
 
-## Contributing
-
-Contributions are welcome! To get started:
-
-1. Clone the repository.
-2. Use JDK 19 and Maven to build the project.
-3. Submit pull requests with your changes.
-
----
-
-## Community and Support
-
-Join our [Discord server](https://discord.gg/nSWRYzBMfp) for help and discussions.
-
-**Note:** Please use the support forum in Discord for technical questions.
+**CatWalk** - Bridging Minecraft servers through intelligent API networking.

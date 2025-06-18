@@ -1,214 +1,152 @@
-  # =================================================================
-  # CatWalk Hub Gateway Configuration
-  # =================================================================
+# =================================================================
+# CatWalk Hub Gateway Configuration
+# =================================================================
 
-  # =================================================================
-  # CORE WEB SERVER SETTINGS
-  # =================================================================
+# =================================================================
+# CORE WEB SERVER SETTINGS
+# =================================================================
 
-  # Port for the web server
-  port: 4567
+# Port for the web server
+port: 4567
 
-  # Enable debug logging
-  debug: false
+# Enable debug logging
+debug: false
 
-  # Enable authentication for API endpoints
-  useKeyAuth: true
+# Enable authentication for API endpoints
+useKeyAuth: true
 
-  # API authentication key (CHANGE THIS!)
-  key: 'change_me_to_secure_random_string'
+# API authentication key (CHANGE THIS!)
+key: 'change_me_to_secure_random_string'
 
-  # Normalize chat messages
-  normalizeMessages: true
+# Normalize chat messages
+normalizeMessages: true
 
-  # =================================================================
-  # HUB GATEWAY SETTINGS
-  # =================================================================
+# =================================================================
+# HUB GATEWAY SETTINGS
+# =================================================================
 
-  hub:
-    # Whether this server acts as a network hub
-    # Set to true ONLY on your lobby server
-    enabled: false
+hub:
+  # Whether this server acts as a network hub
+  # Set to true ONLY on your lobby server
+  enabled: false
 
-    # Unique identifier for this server in the network
-    # Examples: "lobby", "survival", "creative", "hub", "beta", "vanilla", "heavy"
-    server-id: "unknown"
+  # Unique identifier for this server in the network
+  # Examples: "lobby", "survival", "creative", "hub", "beta", "vanilla", "heavy"
+  server-id: "unknown"
 
-  # =================================================================
-  # DATABASE SETTINGS (REQUIRED)
-  # =================================================================
+# =================================================================
+# DATABASE SETTINGS (REQUIRED)
+# =================================================================
 
-  database:
-    # MariaDB/MySQL database connection settings
-    host: "localhost"
-    port: 3306
-    name: "catwalk_network"
-    username: "catwalk"
-    password: "your_secure_password"
+database:
+  # MariaDB/MySQL database connection settings
+  host: "localhost"
+  port: 3306
+  name: "catwalk_network"
+  username: "catwalk"
+  password: "your_secure_password"
 
-    # Connection pool settings
-    pool-size: 10
-    min-idle: 2
+  # Connection pool settings
+  pool-size: 10
+  min-idle: 2
 
-    # Connection timeouts (milliseconds)
-    connection-timeout: 30000  # 30 seconds
-    idle-timeout: 600000       # 10 minutes
-    max-lifetime: 1800000      # 30 minutes
+  # Connection timeouts (milliseconds)
+  connection-timeout: 30000  # 30 seconds
+  idle-timeout: 600000       # 10 minutes
+  max-lifetime: 1800000      # 30 minutes
 
-  # =================================================================
-  # NETWORK SETTINGS
-  # =================================================================
+# =================================================================
+# NETWORK SETTINGS
+# =================================================================
 
-  network:
-    # Request processing settings
-    request-processing:
-      # How often to check for new requests (seconds)
-      poll-interval: 2
+network:
+  # Request processing settings
+  request-processing:
+    # How often to check for new requests (seconds)
+    poll-interval: 2
 
-      # Default timeout for proxy requests (seconds)
-      default-timeout: 30
+    # Default timeout for proxy requests (seconds)
+    default-timeout: 30
 
-      # Maximum number of retries for failed requests
-      max-retries: 3
+    # Maximum number of retries for failed requests
+    max-retries: 3
 
-      # Maximum concurrent requests per server
-      max-concurrent: 10
+    # Maximum concurrent requests per server
+    max-concurrent: 10
 
-    # Cache settings for performance
-    cache:
-      # How often to refresh network topology cache (seconds)
-      refresh-interval: 120
+  # Cache settings for performance
+  cache:
+    # How often to refresh network topology cache (seconds)
+    refresh-interval: 120
 
-      # Enable local caching of server/addon data
-      enabled: true
+    # Enable local caching of server/addon data
+    enabled: true
 
-    # Cleanup settings
-    cleanup:
-      # Remove completed requests older than this (hours)
-      request-retention: 24
+# =================================================================
+# TLS/SSL SETTINGS
+# =================================================================
 
-      # Remove response data older than this (hours)
-      response-retention: 24
+tls:
+  # Enable TLS/SSL encryption
+  enabled: false
 
-      # Remove metrics older than this (days)
-      metrics-retention: 30
+  # Path to keystore file (relative to plugin folder)
+  keystore: keystore.jks
 
-  # =================================================================
-  # TLS/SSL SETTINGS
-  # =================================================================
+  # Keystore password
+  keystorePassword: ""
 
-  tls:
-    # Enable TLS/SSL encryption
-    enabled: false
+  # Enforce Server Name Indication (SNI)
+  sni: false
 
-    # Path to keystore file (relative to plugin folder)
-    keystore: keystore.jks
+# =================================================================
+# CORS SETTINGS
+# =================================================================
 
-    # Keystore password
-    keystorePassword: ""
+# Allowed CORS origins
+# Use ["*"] to allow all origins (not recommended for production)
+corsOrigins:
+  - "*"
+  # Examples for production:
+  # - "https://yourdomain.com"
+  # - "https://dashboard.yourserver.net"
+  # - "http://localhost:3000"
 
-    # Enforce Server Name Indication (SNI)
-    sni: false
+# =================================================================
+# WEBSOCKET SETTINGS
+# =================================================================
 
-  # =================================================================
-  # CORS SETTINGS
-  # =================================================================
+# Number of console log lines to buffer for websocket connections
+# Set to 0 to disable console streaming
+websocketConsoleBuffer: 1000
 
-  # Allowed CORS origins
-  # Use ["*"] to allow all origins (not recommended for production)
-  corsOrigins:
-    - "*"
-    # Examples for production:
-    # - "https://yourdomain.com"
-    # - "https://dashboard.yourserver.net"
-    # - "http://localhost:3000"
+# =================================================================
+# API DOCUMENTATION
+# =================================================================
 
-  # =================================================================
-  # WEBSOCKET SETTINGS
-  # =================================================================
+# Disable Swagger UI (set to true to hide API documentation)
+disable-swagger: false
 
-  # Number of console log lines to buffer for websocket connections
-  # Set to 0 to disable console streaming
-  websocketConsoleBuffer: 1000
+# =================================================================
+# SECURITY SETTINGS
+# =================================================================
 
-  # =================================================================
-  # API DOCUMENTATION
-  # =================================================================
+# Paths that should be blocked from API access
+# Use this to disable specific endpoints
+blocked-paths: [ ]
+  # Examples:
+# - "/v1/server/stop"
+# - "/v1/players/*/kick"
+# - "/v1/console/*"
 
-  # Disable Swagger UI (set to true to hide API documentation)
-  disable-swagger: false
-
-  # =================================================================
-  # SECURITY SETTINGS
-  # =================================================================
-
-  # Paths that should be blocked from API access
-  # Use this to disable specific endpoints
-  blocked-paths: []
-    # Examples:
-    # - "/v1/server/stop"
-    # - "/v1/players/*/kick"
-  # - "/v1/console/*"
-
-  # Paths that don't require authentication (whitelist)
-  # These paths will be accessible without API key
-  whitelisted-paths:
-    - "/swagger*"
-    - "/redoc*"
-    - "/openapi.json"
-    - "/v1/network/*"  # Network endpoints are public for hub discovery
-    - "/health"
-    # Examples:
-    # - "/v1/server/status"
-    # - "/v1/stats/summary"
-
-  # =================================================================
-  # ADDON SETTINGS
-  # =================================================================
-
-  addons:
-    # Enable automatic addon discovery and registration
-    auto-discovery: true
-
-    # Addon-specific settings
-    settings:
-      graylist:
-        enabled: true
-      towny:
-        enabled: true
-      magic:
-        enabled: true
-
-  # =================================================================
-  # PERFORMANCE SETTINGS
-  # =================================================================
-
-  performance:
-    # Thread pool size for async operations
-    thread-pool-size: 4
-
-    # Database query timeout (seconds)
-    query-timeout: 30
-
-    # Enable performance metrics collection
-    metrics-enabled: true
-
-  # =================================================================
-  # LOGGING SETTINGS
-  # =================================================================
-
-  logging:
-    # Log all API requests (can be verbose)
-    log-requests: false
-
-    # Log database operations
-    log-database: false
-
-    # Log addon registrations
-    log-addons: true
-
-    # Log proxy requests (hub only)
-    log-proxy: false
-
-    # Log network discovery
-    log-network: true
+# Paths that don't require authentication (whitelist)
+# These paths will be accessible without API key
+whitelisted-paths:
+  - "/swagger*"
+  - "/redoc*"
+  - "/openapi.json"
+  - "/v1/network/*"  # Network endpoints are public for hub discovery
+  - "/health"
+  # Examples:
+  # - "/v1/server/status"
+  # - "/v1/stats/summary"
