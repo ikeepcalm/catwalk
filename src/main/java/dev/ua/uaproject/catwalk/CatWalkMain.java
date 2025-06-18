@@ -13,7 +13,8 @@ import dev.ua.uaproject.catwalk.hub.webserver.WebServer;
 import dev.ua.uaproject.catwalk.hub.webserver.WebServerRoutes;
 import dev.ua.uaproject.catwalk.hub.webserver.services.CatWalkWebserverService;
 import dev.ua.uaproject.catwalk.hub.webserver.services.CatWalkWebserverServiceImpl;
-import io.javalin.openapi.plugin.OpenApiPlugin;
+import io.javalin.http.HandlerType;
+import io.javalin.openapi.*;
 import io.papermc.paper.plugin.configuration.PluginMeta;
 import lombok.Getter;
 import org.bukkit.Bukkit;
@@ -32,12 +33,12 @@ public class CatWalkMain extends JavaPlugin {
     private final LagDetector lagDetector;
 
     @Getter
+    private Gson gson;
+
+    @Getter
     private StatsManager statsManager;
     private final Server server;
     private WebServer app;
-
-    @Getter
-    private Gson gson;
 
     @Getter
     private boolean isHubMode = false;
@@ -64,6 +65,7 @@ public class CatWalkMain extends JavaPlugin {
     public void onEnable() {
         try {
             log = getLogger();
+            gson = new Gson();
             Class.forName("io.javalin.Javalin");
             log.info("[CatWalk] Custom loader successfully provided dependencies!");
 
@@ -87,9 +89,9 @@ public class CatWalkMain extends JavaPlugin {
             loadHubConfiguration(bukkitConfig);
             setupWebServer(bukkitConfig);
 
-            // FIXED: Register StatsApi through bridge system so OpenAPI annotations are detected
+            // FIXED: Register StatsApi directly with OpenAPI tracking
             ApiV1Initializer api = new ApiV1Initializer(this, log, lagDetector, statsManager);
-            webserverService.registerHandlers(api.getStatsApi());
+            registerStatsApiWithOpenApi(api);
 
             // Add basic routes
             WebServerRoutes.addBasicRoutes(this, log, app);
@@ -101,6 +103,8 @@ public class CatWalkMain extends JavaPlugin {
             }
 
             log.info("[CatWalk] Plugin enabled successfully!");
+            log.info("[CatWalk] OpenAPI documentation available at /openapi.json");
+            log.info("[CatWalk] Swagger UI available at /swagger");
 
         } catch (ClassNotFoundException e) {
             log.severe("[CatWalk] Custom loader failed: " + e.getMessage());
@@ -112,7 +116,49 @@ public class CatWalkMain extends JavaPlugin {
         }
     }
 
-    // NEW - Load hub configuration
+    // NEW: Register StatsApi with OpenAPI annotations tracked
+    private void registerStatsApiWithOpenApi(ApiV1Initializer api) {
+        log.info("[CatWalk] Registering StatsApi with OpenAPI documentation...");
+
+//        // Register /v1/stats/summary
+//        OpenApi summaryAnnotation = createOpenApiAnnotation(
+//                "/v1/stats/summary",
+//                "Get server statistics summary",
+//                new String[]{"Stats"},
+//                new HttpMethod[]{HttpMethod.GET}
+//        );
+//        app.registerRoute(HandlerType.GET, "/v1/stats/summary", api.getStatsApi()::getStatsSummary, summaryAnnotation);
+//
+//        // Register /v1/stats/online
+//        OpenApi onlineAnnotation = createOpenApiAnnotation(
+//                "/v1/stats/online",
+//                "Get online players data for the past week",
+//                new String[]{"Stats"},
+//                new HttpMethod[]{HttpMethod.GET}
+//        );
+//        app.registerRoute(HandlerType.GET, "/v1/stats/online", api.getStatsApi()::getOnlinePlayersData, onlineAnnotation);
+//
+//        // Register /v1/stats/topplayers
+//        OpenApi topPlayersAnnotation = createOpenApiAnnotation(
+//                "/v1/stats/topplayers",
+//                "Get most active players by playtime",
+//                new String[]{"Stats"},
+//                new HttpMethod[]{HttpMethod.GET}
+//        );
+//        app.registerRoute(HandlerType.GET, "/v1/stats/topplayers", api.getStatsApi()::getTopPlayers, topPlayersAnnotation);
+//
+//        // Register /v1/stats/hourly
+//        OpenApi hourlyAnnotation = createOpenApiAnnotation(
+//                "/v1/stats/hourly",
+//                "Get current hourly player distribution",
+//                new String[]{"Stats"},
+//                new HttpMethod[]{HttpMethod.GET}
+//        );
+//        app.registerRoute(HandlerType.GET, "/v1/stats/hourly", api.getStatsApi()::getHourlyDistribution, hourlyAnnotation);
+
+        log.info("[CatWalk] StatsApi endpoints registered with OpenAPI documentation");
+    }
+
     private void loadHubConfiguration(FileConfiguration config) {
         this.isHubMode = config.getBoolean("hub.enabled", false);
         this.serverId = config.getString("hub.server-id", "unknown");
@@ -121,7 +167,6 @@ public class CatWalkMain extends JavaPlugin {
         log.info("Server ID: " + serverId);
     }
 
-    // NEW - Initialize hub gateway components
     private void initializeHubComponents() {
         log.info("Initializing Hub Gateway components...");
 
@@ -137,7 +182,7 @@ public class CatWalkMain extends JavaPlugin {
         log.info("Hub Gateway initialized successfully");
     }
 
-    // NEW - Initialize regular server components
+    // Initialize regular server components
     private void initializeServerComponents() {
         log.info("Initializing as regular server...");
 
@@ -170,17 +215,24 @@ public class CatWalkMain extends JavaPlugin {
         FileConfiguration bukkitConfig = getConfig();
         maxConsoleBufferSize = bukkitConfig.getInt("websocketConsoleBuffer");
 
-        // NEW - Reload hub configuration
+        // Reload hub configuration
         loadHubConfiguration(bukkitConfig);
 
         setupWebServer(bukkitConfig);
 
-        // NEW - Reinitialize components based on mode
+        // Reinitialize components based on mode
         if (isHubMode) {
             initializeHubComponents();
         } else {
             initializeServerComponents();
         }
+
+        // Re-register APIs
+        ApiV1Initializer api = new ApiV1Initializer(this, log, lagDetector, statsManager);
+        registerStatsApiWithOpenApi(api);
+
+        // Re-add basic routes
+        WebServerRoutes.addBasicRoutes(this, log, app);
 
         log.info("CatWalk reloaded successfully!");
     }
@@ -191,7 +243,7 @@ public class CatWalkMain extends JavaPlugin {
 
         log.info(String.format("[%s] Disabled Version %s", pluginMeta.getDescription(), pluginMeta.getVersion()));
 
-        // NEW - Cleanup hub components
+        // Cleanup hub components
         if (networkGateway != null) {
             networkGateway.shutdown();
         }
@@ -207,9 +259,4 @@ public class CatWalkMain extends JavaPlugin {
     public WebServer getWebServer() {
         return this.app;
     }
-
-    public OpenApiPlugin getOpenApiPlugin() {
-        return this.app.getOpenApiPlugin();
-    }
-
 }

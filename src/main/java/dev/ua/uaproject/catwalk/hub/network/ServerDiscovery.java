@@ -1,6 +1,7 @@
 package dev.ua.uaproject.catwalk.hub.network;
 
 import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.common.utils.Constants;
 import dev.ua.uaproject.catwalk.hub.network.source.AddonInfo;
 import lombok.extern.slf4j.Slf4j;
 import com.google.common.io.ByteArrayDataOutput;
@@ -21,7 +22,7 @@ public class ServerDiscovery {
         this.plugin = plugin;
         
         // Setup plugin messaging
-        plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, "velocity:main");
+        plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Constants.PLUGIN_CHANNEL);
         
         // Start periodic announcements if this is not a hub
         if (!plugin.isHubMode()) {
@@ -41,7 +42,7 @@ public class ServerDiscovery {
         serverInfo.put("onlinePlayers", plugin.getServer().getOnlinePlayers().size());
         serverInfo.put("maxPlayers", plugin.getServer().getMaxPlayers());
         serverInfo.put("timestamp", System.currentTimeMillis());
-        
+
         sendToNetwork("server_announcement", plugin.getServerId(), plugin.getGson().toJson(serverInfo));
         
         log.info("[ServerDiscovery] Announced server '{}' to network", plugin.getServerId());
@@ -72,9 +73,9 @@ public class ServerDiscovery {
             out.write(messageData.toByteArray());
             
             // Send via Velocity to all servers
-            Player player = plugin.getServer().getOnlinePlayers().iterator().next();
+            Player player = plugin.getServer().getOnlinePlayers().stream().findFirst().orElse(null);
             if (player != null) {
-                player.sendPluginMessage(plugin, "velocity:main", out.toByteArray());
+                player.sendPluginMessage(plugin, Constants.PLUGIN_CHANNEL, out.toByteArray());
                 log.debug("[ServerDiscovery] Sent {} to network", messageType);
             } else {
                 log.warn("[ServerDiscovery] No online players to send network message");

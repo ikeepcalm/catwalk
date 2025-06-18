@@ -24,6 +24,7 @@ import java.util.concurrent.CompletionException;
 /**
  * Enhanced processor for handling bridge events from third-party plugins.
  * Supports all HTTP methods, return values, error handling, and authentication.
+ * Works with delayed OpenAPI plugin registration.
  */
 public class BridgeEventHandlerProcessor {
 
@@ -37,12 +38,18 @@ public class BridgeEventHandlerProcessor {
 
     /**
      * Registers all methods in the handler instance that have the OpenApi annotation.
+     * This method works correctly even when called before the OpenAPI plugin is initialized.
      *
      * @param handlerInstance The instance containing handler methods
      */
     public void registerHandler(Object handlerInstance, String plugin, @Nullable String docs) {
         Class<?> clazz = handlerInstance.getClass();
         WebServer webServer = CatWalkMain.instance.getWebServer();
+
+        logger.info("[BridgeProcessor] Registering handler for plugin: {}", plugin);
+
+        int registeredEndpoints = 0;
+
         for (Method method : clazz.getDeclaredMethods()) {
             OpenApi openApiAnnotation = method.getAnnotation(OpenApi.class);
             if (openApiAnnotation == null) continue;
@@ -50,27 +57,51 @@ public class BridgeEventHandlerProcessor {
             BridgeEventHandler bridgeAnnotation = method.getAnnotation(BridgeEventHandler.class);
             boolean requiresAuth = bridgeAnnotation == null || bridgeAnnotation.requiresAuth();
 
-            logger.info("Registering handler method: {}; Path: {}", method.getName(), openApiAnnotation.path());
+            logger.info("[BridgeProcessor] Registering endpoint: {} {}",
+                    openApiAnnotation.path(),
+                    Arrays.toString(openApiAnnotation.methods()));
 
             // If no HTTP methods are specified, default to GET
-            HttpMethod[] methods = openApiAnnotation.methods().length > 0 ? openApiAnnotation.methods() : new HttpMethod[]{HttpMethod.GET};
+            HttpMethod[] methods = openApiAnnotation.methods().length > 0 ?
+                    openApiAnnotation.methods() :
+                    new HttpMethod[]{HttpMethod.GET};
 
             for (HttpMethod httpMethod : methods) {
-                registerEndpoint(webServer, httpMethod, openApiAnnotation.path(), method, handlerInstance, requiresAuth);
+                try {
+                    registerEndpoint(webServer, httpMethod, openApiAnnotation.path(), method, handlerInstance, requiresAuth);
+                    registeredEndpoints++;
+                } catch (Exception e) {
+                    logger.error("[BridgeProcessor] Failed to register endpoint {} {}: {}",
+                            httpMethod, openApiAnnotation.path(), e.getMessage());
+                }
             }
         }
 
+        logger.info("[BridgeProcessor] Successfully registered {} endpoints for plugin '{}'",
+                registeredEndpoints, plugin);
+
+        // Register plugin-specific OpenAPI documentation if provided
         if (docs != null) {
-            webServer.get("/plugins/" + plugin + "/openapi.json", ctx -> {
-                ctx.contentType("application/json").result(docs);
-            });
+            try {
+                webServer.get("/plugins/" + plugin + "/openapi.json", ctx -> {
+                    ctx.contentType("application/json").result(docs);
+                });
+                logger.info("[BridgeProcessor] Registered OpenAPI documentation for plugin: {}", plugin);
+            } catch (Exception e) {
+                logger.error("[BridgeProcessor] Failed to register OpenAPI docs for plugin {}: {}",
+                        plugin, e.getMessage());
+            }
         }
     }
 
     /**
      * Registers an endpoint with the web server based on the HTTP method.
      */
-    private void registerEndpoint(WebServer webServer, HttpMethod httpMethod, String path, Method method, Object handlerInstance, boolean requiresAuth) {
+    private void registerEndpoint(WebServer webServer, HttpMethod httpMethod, String path,
+                                  Method method, Object handlerInstance, boolean requiresAuth) {
+
+        logger.debug("[BridgeProcessor] Registering {} {} (auth: {})", httpMethod, path, requiresAuth);
+
         switch (httpMethod) {
             case GET ->
                     webServer.get(path, context -> handleRequest(context, method, handlerInstance, null, requiresAuth));
@@ -82,8 +113,7 @@ public class BridgeEventHandlerProcessor {
                     webServer.delete(path, context -> handleRequest(context, method, handlerInstance, getMethodParamType(method), requiresAuth));
             case PATCH ->
                     webServer.addRoute(io.javalin.http.HandlerType.PATCH, path, context -> handleRequest(context, method, handlerInstance, getMethodParamType(method), requiresAuth));
-            // Add other HTTP methods as needed
-            default -> logger.warn("Unsupported HTTP method: {}", httpMethod);
+            default -> logger.warn("[BridgeProcessor] Unsupported HTTP method: {}", httpMethod);
         }
     }
 
@@ -92,10 +122,13 @@ public class BridgeEventHandlerProcessor {
      */
     private void handleRequest(Context context, Method method, Object handlerInstance, Class<?> paramType, boolean requiresAuth) {
         try {
+            logger.debug("[BridgeProcessor] Handling request: {} {}", context.method(), context.path());
+
             // Check authentication if required
             if (requiresAuth) {
                 String authHeader = context.header("Authorization");
                 if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                    logger.debug("[BridgeProcessor] Unauthorized request to {}", context.path());
                     context.status(HttpStatus.UNAUTHORIZED).json(Map.of("error", "Authentication required"));
                     return;
                 }
@@ -113,8 +146,7 @@ public class BridgeEventHandlerProcessor {
                 }
                 // Handle our custom PathParam annotation
                 else if (parameter.isAnnotationPresent(BridgePathParam.class)) {
-                    BridgePathParam paramAnnotation =
-                        parameter.getAnnotation(BridgePathParam.class);
+                    BridgePathParam paramAnnotation = parameter.getAnnotation(BridgePathParam.class);
                     String paramName = paramAnnotation.value();
                     String paramValue = context.pathParam(paramName);
                     pathParams.put(paramName, paramValue);
@@ -123,9 +155,9 @@ public class BridgeEventHandlerProcessor {
 
             // Check if the method has path parameter annotations
             boolean hasPathParameters = method.getParameters().length > 0 &&
-                                        Arrays.stream(method.getParameters())
-                                              .anyMatch(p -> p.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class) ||
-                                                          p.isAnnotationPresent(BridgePathParam.class));
+                    Arrays.stream(method.getParameters())
+                            .anyMatch(p -> p.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class) ||
+                                    p.isAnnotationPresent(BridgePathParam.class));
 
             // Parse request body if needed
             Object requestBody = null;
@@ -151,9 +183,18 @@ public class BridgeEventHandlerProcessor {
             // Handle the result based on its type
             handleMethodResult(context, result);
 
+            logger.debug("[BridgeProcessor] Successfully handled request: {} {}", context.method(), context.path());
+
         } catch (Exception e) {
-            logger.error("Failed to invoke handler method: {}", method.getName(), e);
-            context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", "Internal server error", "message", e.getMessage(), "endpoint", context.path()));
+            logger.error("[BridgeProcessor] Failed to invoke handler method {}: {}", method.getName(), e.getMessage(), e);
+
+            if (!context.res().isCommitted()) {
+                context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of(
+                        "error", "Internal server error",
+                        "message", e.getMessage(),
+                        "endpoint", context.path()
+                ));
+            }
         }
     }
 
@@ -163,7 +204,9 @@ public class BridgeEventHandlerProcessor {
     private void handleMethodResult(Context context, Object result) {
         switch (result) {
             case null -> {
-                context.status(HttpStatus.NO_CONTENT);
+                if (!context.res().isCommitted()) {
+                    context.status(HttpStatus.NO_CONTENT);
+                }
                 return;
             }
 
@@ -176,18 +219,31 @@ public class BridgeEventHandlerProcessor {
                     }
                 }).exceptionally(e -> {
                     Throwable cause = e instanceof CompletionException ? e.getCause() : e;
-                    logger.error("Async operation failed", cause);
-                    context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", cause.getMessage()));
+                    logger.error("[BridgeProcessor] Async operation failed", cause);
+                    if (!context.res().isCommitted()) {
+                        context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", cause.getMessage()));
+                    }
                     return null;
                 }));
                 return;
             }
 
-            case String s -> context.result(s);
-            case byte[] bytes -> context.result(bytes);
-            default -> context.json(result);
+            case String s -> {
+                if (!context.res().isCommitted()) {
+                    context.result(s);
+                }
+            }
+            case byte[] bytes -> {
+                if (!context.res().isCommitted()) {
+                    context.result(bytes);
+                }
+            }
+            default -> {
+                if (!context.res().isCommitted()) {
+                    context.json(result);
+                }
+            }
         }
-
     }
 
     /**
@@ -238,17 +294,12 @@ public class BridgeEventHandlerProcessor {
      */
     private boolean isPathParameter(Parameter parameter) {
         return parameter.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class) ||
-               parameter.isAnnotationPresent(BridgePathParam.class);
+                parameter.isAnnotationPresent(BridgePathParam.class);
     }
 
     /**
      * Deserializes the request body to the specified parameter type.
      * Also handles path parameters and populates them into the object if field names match.
-     *
-     * @param context The Javalin context containing the request
-     * @param paramType The type of the parameter to deserialize to
-     * @param pathParams Map of path parameters extracted from the URL
-     * @return The deserialized object with fields populated from the request body and path parameters
      */
     private Object deserializeRequestBody(Context context, Class<?> paramType, Map<String, String> pathParams) throws Exception {
         // Choose deserialization method based on content type
@@ -326,12 +377,6 @@ public class BridgeEventHandlerProcessor {
     /**
      * Prepares an array of arguments to be passed to the handler method.
      * Supports path parameters and request body.
-     *
-     * @param method The method to invoke
-     * @param context The Javalin context
-     * @param requestBody The deserialized request body (if any)
-     * @param pathParams Map of path parameters extracted from the URL
-     * @return Array of arguments to pass to the method
      */
     private Object[] prepareMethodArguments(Method method, Context context, Object requestBody, Map<String, String> pathParams) {
         Parameter[] parameters = method.getParameters();

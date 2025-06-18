@@ -4,9 +4,11 @@ import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
 import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.common.utils.Constants;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.messaging.PluginMessageListener;
+import org.jetbrains.annotations.NotNull;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -29,15 +31,16 @@ public class RequestHandler implements PluginMessageListener {
                 .build();
 
         // Register plugin messaging for receiving proxy requests
-        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, "catwalk:proxy", this);
-        plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, "velocity:main");
+        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, Constants.PLUGIN_CHANNEL, this);
+        plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Constants.PLUGIN_CHANNEL);
 
         log.info("[RequestHandler] Initialized for server '{}'", plugin.getServerId());
     }
 
     @Override
-    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-        if (!"catwalk:proxy".equals(channel)) return;
+    public void onPluginMessageReceived(@NotNull String channel, @NotNull Player player, byte @NotNull [] message) {
+        log.info("[RequestHandler] Received channel '{}' from '{}'", channel, player.getName());
+        if (!Constants.PLUGIN_CHANNEL.equals(channel)) return;
 
         try {
             ByteArrayDataInput in = ByteStreams.newDataInput(message);
@@ -140,7 +143,7 @@ public class RequestHandler implements PluginMessageListener {
             Map<String, String> responseHeaders = new HashMap<>();
             httpResponse.headers().map().forEach((key, values) -> {
                 if (!values.isEmpty()) {
-                    responseHeaders.put(key, values.get(0));
+                    responseHeaders.put(key, values.getFirst());
                 }
             });
             response.setHeaders(responseHeaders);
@@ -179,7 +182,7 @@ public class RequestHandler implements PluginMessageListener {
             // Send back to hub via Velocity
             Player player = plugin.getServer().getOnlinePlayers().iterator().next();
             if (player != null) {
-                player.sendPluginMessage(plugin, "velocity:main", out.toByteArray());
+                player.sendPluginMessage(plugin, Constants.PLUGIN_CHANNEL, out.toByteArray());
                 log.debug("[RequestHandler] Sent response for request {}", requestId);
             } else {
                 log.error("[RequestHandler] No online players to send response");

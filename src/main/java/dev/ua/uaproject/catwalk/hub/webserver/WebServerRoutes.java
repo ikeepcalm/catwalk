@@ -65,14 +65,6 @@ public final class WebServerRoutes {
             ));
         });
 
-        webServer.get("/swagger.html", ctx -> {
-            ctx.redirect("/plainswagger");
-        });
-
-        webServer.get("/openapi", ctx -> {
-            ctx.redirect("/openapi.json");
-        });
-
         webServer.get("/health", ctx -> {
             ctx.json(java.util.Map.of(
                     "status", "healthy",
