@@ -38,9 +38,16 @@ public class CatWalkLoader implements PluginLoader {
                 new Dependency(new DefaultArtifact("com.fasterxml.jackson.core:jackson-annotations:2.16.1"), null),
 
                 // Apache Commons utilities
-                new Dependency(new DefaultArtifact("org.apache.commons:commons-compress:1.24.0"), null),
-                new Dependency(new DefaultArtifact("commons-io:commons-io:2.13.0"), null),
-                new Dependency(new DefaultArtifact("org.apache.commons:commons-lang3:3.12.0"), null)
+                new Dependency(new DefaultArtifact("org.apache.commons:commons-compress:1.26.0"), null),
+                new Dependency(new DefaultArtifact("commons-io:commons-io:2.14.0"), null),
+                new Dependency(new DefaultArtifact("org.apache.commons:commons-lang3:3.12.0"), null),
+
+                // Database dependencies (NEW for v0.8+)
+                new Dependency(new DefaultArtifact("com.zaxxer:HikariCP:5.1.0"), null),
+                new Dependency(new DefaultArtifact("org.mariadb.jdbc:mariadb-java-client:3.3.2"), null),
+
+                // SLF4J binding for HikariCP logging
+                new Dependency(new DefaultArtifact("org.slf4j:slf4j-jdk14:2.0.9"), null)
         );
 
         // Add all dependencies to the resolver

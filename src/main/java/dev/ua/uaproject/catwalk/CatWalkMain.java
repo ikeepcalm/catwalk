@@ -2,19 +2,19 @@ package dev.ua.uaproject.catwalk;
 
 import com.google.gson.Gson;
 import dev.ua.uaproject.catwalk.common.commands.CatWalkCommand;
+import dev.ua.uaproject.catwalk.common.database.DatabaseConfig;
+import dev.ua.uaproject.catwalk.common.database.DatabaseManager;
+import dev.ua.uaproject.catwalk.common.database.model.RequestProcessor;
 import dev.ua.uaproject.catwalk.common.utils.LagDetector;
 import dev.ua.uaproject.catwalk.hub.api.ApiV1Initializer;
 import dev.ua.uaproject.catwalk.hub.api.stats.StatsListener;
 import dev.ua.uaproject.catwalk.hub.api.stats.StatsManager;
-import dev.ua.uaproject.catwalk.hub.network.AddonRegistry;
 import dev.ua.uaproject.catwalk.hub.network.NetworkGateway;
-import dev.ua.uaproject.catwalk.hub.network.ServerDiscovery;
+import dev.ua.uaproject.catwalk.hub.network.NetworkRegistry;
 import dev.ua.uaproject.catwalk.hub.webserver.WebServer;
 import dev.ua.uaproject.catwalk.hub.webserver.WebServerRoutes;
 import dev.ua.uaproject.catwalk.hub.webserver.services.CatWalkWebserverService;
 import dev.ua.uaproject.catwalk.hub.webserver.services.CatWalkWebserverServiceImpl;
-import io.javalin.http.HandlerType;
-import io.javalin.openapi.*;
 import io.papermc.paper.plugin.configuration.PluginMeta;
 import lombok.Getter;
 import org.bukkit.Bukkit;
@@ -46,13 +46,18 @@ public class CatWalkMain extends JavaPlugin {
     @Getter
     private String serverId;
 
+    // NEW - Database-based components
     @Getter
-    private NetworkGateway networkGateway;
-    @Getter
-    private ServerDiscovery serverDiscovery;
+    private DatabaseManager databaseManager;
 
     @Getter
-    private AddonRegistry addonRegistry;
+    private NetworkRegistry networkRegistry;
+
+    @Getter
+    private NetworkGateway hubGateway;
+
+    @Getter
+    private RequestProcessor requestProcessor;
 
     public CatWalkMain() {
         super();
@@ -67,7 +72,7 @@ public class CatWalkMain extends JavaPlugin {
             log = getLogger();
             gson = new Gson();
             Class.forName("io.javalin.Javalin");
-            log.info("[CatWalk] Custom loader successfully provided dependencies!");
+            log.info("Custom loader successfully provided dependencies!");
 
             this.statsManager = new StatsManager(this);
             Bukkit.getScheduler().runTaskTimer(this, lagDetector, 100, 1);
@@ -79,126 +84,112 @@ public class CatWalkMain extends JavaPlugin {
             new CatWalkCommand(this);
             server.getPluginManager().registerEvents(new StatsListener(statsManager), this);
 
-            // Initialize addon registry to track all network addons
-            this.addonRegistry = new AddonRegistry(this);
+            // Load configuration
+            loadHubConfiguration(bukkitConfig);
+
+            // Initialize database connection
+            initializeDatabase(bukkitConfig);
+
+            // Initialize network registry
+            this.networkRegistry = new NetworkRegistry(databaseManager, serverId, isHubMode);
 
             // IMPORTANT: Register webserver service FIRST
             CatWalkWebserverService webserverService = new CatWalkWebserverServiceImpl(this);
             server.getServicesManager().register(CatWalkWebserverService.class, webserverService, this, ServicePriority.Normal);
 
-            loadHubConfiguration(bukkitConfig);
             setupWebServer(bukkitConfig);
 
-            // FIXED: Register StatsApi directly with OpenAPI tracking
-            ApiV1Initializer api = new ApiV1Initializer(this, log, lagDetector, statsManager);
-            registerStatsApiWithOpenApi(api);
-
-            // Add basic routes
-            WebServerRoutes.addBasicRoutes(this, log, app);
-
+            // Initialize based on server mode
             if (isHubMode) {
                 initializeHubComponents();
             } else {
-                initializeServerComponents();
+                initializeBackendComponents();
             }
 
-            log.info("[CatWalk] Plugin enabled successfully!");
-            log.info("[CatWalk] OpenAPI documentation available at /openapi.json");
-            log.info("[CatWalk] Swagger UI available at /swagger");
+            // Register core API routes
+            registerCoreApiRoutes();
+
+            log.info("Plugin enabled successfully!");
+            log.info("Mode: " + (isHubMode ? "Hub Gateway" : "Backend Server") + " | Server ID: " + serverId);            log.info("OpenAPI documentation available at /openapi.json");
+            log.info("Swagger UI available at /swagger");
 
         } catch (ClassNotFoundException e) {
-            log.severe("[CatWalk] Custom loader failed: " + e.getMessage());
+            log.severe("Custom loader failed: " + e.getMessage());
             getServer().getPluginManager().disablePlugin(this);
         } catch (Exception e) {
-            log.severe("[CatWalk] Failed to initialize: " + e.getMessage());
+            log.severe("Failed to initialize: " + e.getMessage());
             e.printStackTrace();
             getServer().getPluginManager().disablePlugin(this);
         }
     }
 
-    // NEW: Register StatsApi with OpenAPI annotations tracked
-    private void registerStatsApiWithOpenApi(ApiV1Initializer api) {
-        log.info("[CatWalk] Registering StatsApi with OpenAPI documentation...");
+    private void initializeDatabase(FileConfiguration config) {
+        try {
+            DatabaseConfig dbConfig = DatabaseConfig.fromBukkitConfig(config);
+            this.databaseManager = new DatabaseManager(dbConfig);
+            log.info(String.format("Database connection established to %s:%d/%s",
+                    dbConfig.getHost(), dbConfig.getPort(), dbConfig.getDatabase()));
 
-//        // Register /v1/stats/summary
-//        OpenApi summaryAnnotation = createOpenApiAnnotation(
-//                "/v1/stats/summary",
-//                "Get server statistics summary",
-//                new String[]{"Stats"},
-//                new HttpMethod[]{HttpMethod.GET}
-//        );
-//        app.registerRoute(HandlerType.GET, "/v1/stats/summary", api.getStatsApi()::getStatsSummary, summaryAnnotation);
-//
-//        // Register /v1/stats/online
-//        OpenApi onlineAnnotation = createOpenApiAnnotation(
-//                "/v1/stats/online",
-//                "Get online players data for the past week",
-//                new String[]{"Stats"},
-//                new HttpMethod[]{HttpMethod.GET}
-//        );
-//        app.registerRoute(HandlerType.GET, "/v1/stats/online", api.getStatsApi()::getOnlinePlayersData, onlineAnnotation);
-//
-//        // Register /v1/stats/topplayers
-//        OpenApi topPlayersAnnotation = createOpenApiAnnotation(
-//                "/v1/stats/topplayers",
-//                "Get most active players by playtime",
-//                new String[]{"Stats"},
-//                new HttpMethod[]{HttpMethod.GET}
-//        );
-//        app.registerRoute(HandlerType.GET, "/v1/stats/topplayers", api.getStatsApi()::getTopPlayers, topPlayersAnnotation);
-//
-//        // Register /v1/stats/hourly
-//        OpenApi hourlyAnnotation = createOpenApiAnnotation(
-//                "/v1/stats/hourly",
-//                "Get current hourly player distribution",
-//                new String[]{"Stats"},
-//                new HttpMethod[]{HttpMethod.GET}
-//        );
-//        app.registerRoute(HandlerType.GET, "/v1/stats/hourly", api.getStatsApi()::getHourlyDistribution, hourlyAnnotation);
-
-        log.info("[CatWalk] StatsApi endpoints registered with OpenAPI documentation");
+        } catch (Exception e) {
+            log.severe("Failed to initialize database connection: " + e.getMessage());
+            throw new RuntimeException("Database initialization failed", e);
+        }
     }
 
     private void loadHubConfiguration(FileConfiguration config) {
         this.isHubMode = config.getBoolean("hub.enabled", false);
         this.serverId = config.getString("hub.server-id", "unknown");
 
-        log.info("Mode: " + (isHubMode ? "Hub Gateway" : "Regular Server"));
+        log.info("Mode: " + (isHubMode ? "Hub Gateway" : "Backend Server"));
         log.info("Server ID: " + serverId);
     }
 
     private void initializeHubComponents() {
         log.info("Initializing Hub Gateway components...");
 
-        // Initialize server discovery for network topology
-        this.serverDiscovery = new ServerDiscovery(this);
+        // Initialize hub gateway for handling proxy requests
+        this.hubGateway = new NetworkGateway(databaseManager, networkRegistry, app, this);
 
-        // Initialize network gateway for proxying requests
-        this.networkGateway = new NetworkGateway(this, app);
-
-        // Register network routes with the web server
-        WebServerRoutes.addHubRoutes(this, log, networkGateway, app);
+        // Register network proxy routes (done asynchronously after server discovery)
+        Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
+            hubGateway.registerNetworkRoutes();
+            log.info("Hub Gateway proxy routes registered");
+        }, 100L); // 5 second delay to allow backend servers to register
 
         log.info("Hub Gateway initialized successfully");
     }
 
-    // Initialize regular server components
-    private void initializeServerComponents() {
-        log.info("Initializing as regular server...");
+    private void initializeBackendComponents() {
+        log.info("Initializing Backend Server components...");
 
-        // Initialize addon registry for local addons only
-        this.addonRegistry = new AddonRegistry(this);
+        // Initialize request processor for handling incoming requests from hub
+        int localPort = getConfig().getInt("port", 4567);
+        this.requestProcessor = new RequestProcessor(databaseManager, serverId, this, localPort);
 
-        // If this server is part of a network, announce our addons to the hub
-        if (getConfig().getBoolean("hub.announce-to-network", false)) {
-            this.serverDiscovery = new ServerDiscovery(this);
-            // Announce this server's capabilities to the network
-            Bukkit.getScheduler().runTaskLater(this, () -> {
-                serverDiscovery.announceServerToNetwork();
-            }, 100L); // 5 second delay to ensure everything is loaded
+        log.info("Backend Server initialized successfully");
+    }
+
+    private void registerCoreApiRoutes() {
+        // Register core API routes
+        ApiV1Initializer api = new ApiV1Initializer(this, log, lagDetector, statsManager);
+        registerStatsApi(api);
+
+        // Add basic routes
+        WebServerRoutes.addBasicRoutes(this, log, app);
+
+        if (isHubMode) {
+            // Add hub-specific routes
+            WebServerRoutes.addHubRoutes(this, log, null, app); // hubGateway handles proxy routes
         }
+    }
 
-        log.info("Regular server initialized");
+    private void registerStatsApi(ApiV1Initializer api) {
+        log.info("Registering StatsApi endpoints...");
+
+        // Register StatsApi directly with WebServer
+        app.registerHandlerInstance(api.getStatsApi(), "catwalk-stats");
+
+        log.info("StatsApi endpoints registered");
     }
 
     private void setupWebServer(FileConfiguration bukkitConfig) {
@@ -210,6 +201,7 @@ public class CatWalkMain extends JavaPlugin {
         if (app != null) {
             app.stop();
         }
+
         log.info("CatWalk reloading...");
         reloadConfig();
         FileConfiguration bukkitConfig = getConfig();
@@ -218,21 +210,27 @@ public class CatWalkMain extends JavaPlugin {
         // Reload hub configuration
         loadHubConfiguration(bukkitConfig);
 
+        // Shutdown existing components
+        if (hubGateway != null) {
+            hubGateway.shutdown();
+            hubGateway = null;
+        }
+        if (requestProcessor != null) {
+            requestProcessor.shutdown();
+            requestProcessor = null;
+        }
+
         setupWebServer(bukkitConfig);
 
         // Reinitialize components based on mode
         if (isHubMode) {
             initializeHubComponents();
         } else {
-            initializeServerComponents();
+            initializeBackendComponents();
         }
 
         // Re-register APIs
-        ApiV1Initializer api = new ApiV1Initializer(this, log, lagDetector, statsManager);
-        registerStatsApiWithOpenApi(api);
-
-        // Re-add basic routes
-        WebServerRoutes.addBasicRoutes(this, log, app);
+        registerCoreApiRoutes();
 
         log.info("CatWalk reloaded successfully!");
     }
@@ -243,12 +241,18 @@ public class CatWalkMain extends JavaPlugin {
 
         log.info(String.format("[%s] Disabled Version %s", pluginMeta.getDescription(), pluginMeta.getVersion()));
 
-        // Cleanup hub components
-        if (networkGateway != null) {
-            networkGateway.shutdown();
+        // Cleanup components
+        if (hubGateway != null) {
+            hubGateway.shutdown();
         }
-        if (serverDiscovery != null) {
-            serverDiscovery.shutdown();
+        if (requestProcessor != null) {
+            requestProcessor.shutdown();
+        }
+        if (networkRegistry != null) {
+            networkRegistry.shutdown();
+        }
+        if (databaseManager != null) {
+            databaseManager.shutdown();
         }
 
         if (app != null) {
@@ -258,5 +262,11 @@ public class CatWalkMain extends JavaPlugin {
 
     public WebServer getWebServer() {
         return this.app;
+    }
+
+    // Legacy getter for compatibility - returns NetworkRegistry instead
+    @Deprecated
+    public NetworkRegistry getAddonRegistry() {
+        return networkRegistry;
     }
 }

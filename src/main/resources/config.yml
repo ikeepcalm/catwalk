@@ -1,235 +1,214 @@
-# =================================================================
-# CatWalk Hub Gateway Configuration Template
-# =================================================================
+  # =================================================================
+  # CatWalk Hub Gateway Configuration
+  # =================================================================
 
-# =================================================================
-# CORE WEB SERVER SETTINGS
-# =================================================================
+  # =================================================================
+  # CORE WEB SERVER SETTINGS
+  # =================================================================
 
-# Port for the web server (only matters for hub servers and standalone servers)
-port: 4567
+  # Port for the web server
+  port: 4567
 
-# Enable debug logging
-debug: false
+  # Enable debug logging
+  debug: false
 
-# Enable authentication for API endpoints
-useKeyAuth: true
+  # Enable authentication for API endpoints
+  useKeyAuth: true
 
-# API authentication key (CHANGE THIS!)
-key: 'change_me_to_secure_random_string'
+  # API authentication key (CHANGE THIS!)
+  key: 'change_me_to_secure_random_string'
 
-# Normalize chat messages
-normalizeMessages: true
+  # Normalize chat messages
+  normalizeMessages: true
 
-# =================================================================
-# HUB GATEWAY SETTINGS (NEW)
-# =================================================================
+  # =================================================================
+  # HUB GATEWAY SETTINGS
+  # =================================================================
 
-hub:
-  # Whether this server acts as a network hub
-  # Set to true ONLY on your lobby server
-  enabled: false
+  hub:
+    # Whether this server acts as a network hub
+    # Set to true ONLY on your lobby server
+    enabled: false
 
-  # Unique identifier for this server in the network
-  # Examples: "lobby", "survival", "creative", "hub", "beta", "vanilla", "heavy"
-  server-id: "unknown"
+    # Unique identifier for this server in the network
+    # Examples: "lobby", "survival", "creative", "hub", "beta", "vanilla", "heavy"
+    server-id: "unknown"
 
-  # Whether this server should announce itself and its addons to the network
-  # Set to true for backend servers, false for hub servers
-  announce-to-network: false
+  # =================================================================
+  # DATABASE SETTINGS (REQUIRED)
+  # =================================================================
 
-  # How often to announce server status to network (seconds)
-  announcement-interval: 60
+  database:
+    # MariaDB/MySQL database connection settings
+    host: "localhost"
+    port: 3306
+    name: "catwalk_network"
+    username: "catwalk"
+    password: "your_secure_password"
 
-  # Timeout for proxy requests (seconds)
-  proxy-timeout: 30
+    # Connection pool settings
+    pool-size: 10
+    min-idle: 2
 
-  # Enable automatic proxy route generation
-  auto-proxy: true
+    # Connection timeouts (milliseconds)
+    connection-timeout: 30000  # 30 seconds
+    idle-timeout: 600000       # 10 minutes
+    max-lifetime: 1800000      # 30 minutes
 
-# =================================================================
-# OPENAPI SETTINGS (NEW)
-# =================================================================
+  # =================================================================
+  # NETWORK SETTINGS
+  # =================================================================
 
-openapi:
-  # Delay in seconds before registering OpenAPI plugin
-  # This allows time for addons to register their endpoints
-  # Increase this value if you have many addons or slow startup
-  registration-delay: 10
+  network:
+    # Request processing settings
+    request-processing:
+      # How often to check for new requests (seconds)
+      poll-interval: 2
 
-# =================================================================
-# TLS/SSL SETTINGS
-# =================================================================
+      # Default timeout for proxy requests (seconds)
+      default-timeout: 30
 
-tls:
-  # Enable TLS/SSL encryption
-  enabled: false
+      # Maximum number of retries for failed requests
+      max-retries: 3
 
-  # Path to keystore file (relative to plugin folder)
-  keystore: keystore.jks
+      # Maximum concurrent requests per server
+      max-concurrent: 10
 
-  # Keystore password
-  keystorePassword: ""
+    # Cache settings for performance
+    cache:
+      # How often to refresh network topology cache (seconds)
+      refresh-interval: 120
 
-  # Enforce Server Name Indication (SNI)
-  sni: false
-
-# =================================================================
-# CORS SETTINGS
-# =================================================================
-
-# Allowed CORS origins
-# Use ["*"] to allow all origins (not recommended for production)
-corsOrigins:
-  - "*"
-  # Examples for production:
-  # - "https://yourdomain.com"
-  # - "https://dashboard.yourserver.net"
-  # - "http://localhost:3000"
-
-# =================================================================
-# WEBSOCKET SETTINGS
-# =================================================================
-
-# Number of console log lines to buffer for websocket connections
-# Set to 0 to disable console streaming
-websocketConsoleBuffer: 1000
-
-# =================================================================
-# API DOCUMENTATION
-# =================================================================
-
-# Disable Swagger UI (set to true to hide API documentation)
-disable-swagger: false
-
-# =================================================================
-# SECURITY SETTINGS
-# =================================================================
-
-# Paths that should be blocked from API access
-# Use this to disable specific endpoints
-blocked-paths: []
-  # Examples:
-  # - "/v1/server/stop"
-  # - "/v1/players/*/kick"
-# - "/v1/console/*"
-
-# Paths that don't require authentication (whitelist)
-# These paths will be accessible without API key
-whitelisted-paths:
-  - "/swagger*"
-  - "/redoc*"
-  - "/openapi.json"
-  - "/v1/network/status"
-  - "/health"
-  # Examples:
-  # - "/v1/server/status"
-  # - "/v1/stats/summary"
-
-# =================================================================
-# ADDON SETTINGS (NEW)
-# =================================================================
-
-addons:
-  # Enable automatic addon discovery and registration
-  auto-discovery: true
-
-  # Addon-specific settings
-  # You can configure addon behavior here
-  settings:
-    graylist:
+      # Enable local caching of server/addon data
       enabled: true
-      # Custom settings for Graylist addon
-    towny:
-      enabled: true
-      # Custom settings for Towny addon
-    magic:
-      enabled: true
-      # Custom settings for Magic addon
 
-# =================================================================
-# NETWORK DISCOVERY SETTINGS (NEW)
-# =================================================================
+    # Cleanup settings
+    cleanup:
+      # Remove completed requests older than this (hours)
+      request-retention: 24
 
-network:
-  # Enable network discovery features
-  discovery:
-    enabled: true
+      # Remove response data older than this (hours)
+      response-retention: 24
 
-    # How long to wait for server responses (seconds)
-    timeout: 10
+      # Remove metrics older than this (days)
+      metrics-retention: 30
 
-    # How long to cache server information (seconds)
-    cache-duration: 300
+  # =================================================================
+  # TLS/SSL SETTINGS
+  # =================================================================
 
-    # Retry failed requests to other servers
-    retry-failed: true
+  tls:
+    # Enable TLS/SSL encryption
+    enabled: false
 
-    # Maximum retries for failed requests
-    max-retries: 3
+    # Path to keystore file (relative to plugin folder)
+    keystore: keystore.jks
 
-# =================================================================
-# PERFORMANCE SETTINGS
-# =================================================================
+    # Keystore password
+    keystorePassword: ""
 
-performance:
-  # Thread pool size for async operations
-  thread-pool-size: 4
+    # Enforce Server Name Indication (SNI)
+    sni: false
 
-  # Maximum concurrent proxy requests
-  max-concurrent-requests: 50
+  # =================================================================
+  # CORS SETTINGS
+  # =================================================================
 
-  # Request queue size
-  request-queue-size: 1000
+  # Allowed CORS origins
+  # Use ["*"] to allow all origins (not recommended for production)
+  corsOrigins:
+    - "*"
+    # Examples for production:
+    # - "https://yourdomain.com"
+    # - "https://dashboard.yourserver.net"
+    # - "http://localhost:3000"
 
-# =================================================================
-# LOGGING SETTINGS
-# =================================================================
+  # =================================================================
+  # WEBSOCKET SETTINGS
+  # =================================================================
 
-logging:
-  # Log all API requests (can be verbose)
-  log-requests: false
+  # Number of console log lines to buffer for websocket connections
+  # Set to 0 to disable console streaming
+  websocketConsoleBuffer: 1000
 
-  # Log network communications
-  log-network: false
+  # =================================================================
+  # API DOCUMENTATION
+  # =================================================================
 
-  # Log addon registrations
-  log-addons: true
+  # Disable Swagger UI (set to true to hide API documentation)
+  disable-swagger: false
 
-  # Log proxy requests
-  log-proxy: false
+  # =================================================================
+  # SECURITY SETTINGS
+  # =================================================================
 
-# =================================================================
-# EXAMPLE CONFIGURATIONS
-# =================================================================
+  # Paths that should be blocked from API access
+  # Use this to disable specific endpoints
+  blocked-paths: []
+    # Examples:
+    # - "/v1/server/stop"
+    # - "/v1/players/*/kick"
+  # - "/v1/console/*"
 
-# Hub Server (Lobby) Example:
-# hub:
-#   enabled: true
-#   server-id: "lobby"
-#   announce-to-network: false
-#   auto-proxy: true
-# openapi:
-#   registration-delay: 15  # Longer delay for hub with many backend servers
+  # Paths that don't require authentication (whitelist)
+  # These paths will be accessible without API key
+  whitelisted-paths:
+    - "/swagger*"
+    - "/redoc*"
+    - "/openapi.json"
+    - "/v1/network/*"  # Network endpoints are public for hub discovery
+    - "/health"
+    # Examples:
+    # - "/v1/server/status"
+    # - "/v1/stats/summary"
 
-# Backend Server (Survival) Example:
-# hub:
-#   enabled: false
-#   server-id: "survival"
-#   announce-to-network: true
-# openapi:
-#   registration-delay: 5   # Shorter delay for backend servers
+  # =================================================================
+  # ADDON SETTINGS
+  # =================================================================
 
-# Backend Server (Creative) Example:
-# hub:
-#   enabled: false
-#   server-id: "creative"
-#   announce-to-network: true
+  addons:
+    # Enable automatic addon discovery and registration
+    auto-discovery: true
 
-# Standalone Server (No Network) Example:
-# hub:
-#   enabled: false
-#   server-id: "standalone"
-#   announce-to-network: false
-# openapi:
-#   registration-delay: 5   # Shorter delay for standalone servers
+    # Addon-specific settings
+    settings:
+      graylist:
+        enabled: true
+      towny:
+        enabled: true
+      magic:
+        enabled: true
+
+  # =================================================================
+  # PERFORMANCE SETTINGS
+  # =================================================================
+
+  performance:
+    # Thread pool size for async operations
+    thread-pool-size: 4
+
+    # Database query timeout (seconds)
+    query-timeout: 30
+
+    # Enable performance metrics collection
+    metrics-enabled: true
+
+  # =================================================================
+  # LOGGING SETTINGS
+  # =================================================================
+
+  logging:
+    # Log all API requests (can be verbose)
+    log-requests: false
+
+    # Log database operations
+    log-database: false
+
+    # Log addon registrations
+    log-addons: true
+
+    # Log proxy requests (hub only)
+    log-proxy: false
+
+    # Log network discovery
+    log-network: true

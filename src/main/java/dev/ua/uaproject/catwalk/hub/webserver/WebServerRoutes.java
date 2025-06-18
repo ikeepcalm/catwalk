@@ -74,7 +74,7 @@ public final class WebServerRoutes {
             ));
         });
 
-        log.info("[CatWalk] Basic routes registered");
+        log.info("Basic routes registered");
     }
 
     // NEW - Register hub routes with proper OpenAPI
@@ -100,7 +100,7 @@ public final class WebServerRoutes {
             ctx.json(servers);
         });
 
-        log.info("[CatWalk] Hub routes registered");
+        log.info("Hub routes registered");
     }
 
     private record PrefixedRouteBuilder(String prefix, WebServer webServer) {

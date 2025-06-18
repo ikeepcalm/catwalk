@@ -6,7 +6,7 @@ plugins {
 }
 
 group = 'dev.ua.uaproject.catwalk'
-version = '0.7-SNAPSHOT'
+version = '0.8-SNAPSHOT'
 
 repositories {
     mavenCentral()
@@ -46,6 +46,8 @@ dependencies {
 
     // Lightweight dependencies to include in JAR
     implementation("com.google.code.gson:gson:2.13.1")
+    compileOnly("org.mariadb.jdbc:mariadb-java-client:3.3.2")
+    compileOnly("com.zaxxer:HikariCP:5.1.0")
 
     // Test dependencies (not included in JAR)
     testImplementation 'org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.46.0'

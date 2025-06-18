@@ -1,280 +1,423 @@
 package dev.ua.uaproject.catwalk.hub.network;
 
-import com.google.common.io.ByteArrayDataInput;
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
-import dev.ua.uaproject.catwalk.CatWalkMain;
-import dev.ua.uaproject.catwalk.common.utils.Constants;
-import dev.ua.uaproject.catwalk.hub.network.source.AddonInfo;
-import dev.ua.uaproject.catwalk.hub.network.source.EndpointInfo;
+import com.google.gson.Gson;
+import dev.ua.uaproject.catwalk.common.database.DatabaseManager;
+import dev.ua.uaproject.catwalk.common.database.model.EndpointDefinition;
+import dev.ua.uaproject.catwalk.common.database.model.NetworkRequest;
+import dev.ua.uaproject.catwalk.common.database.model.NetworkResponse;
+import dev.ua.uaproject.catwalk.common.database.model.ServerAddon;
 import dev.ua.uaproject.catwalk.hub.webserver.WebServer;
 import io.javalin.http.Context;
+import io.javalin.http.HandlerType;
 import io.javalin.http.HttpStatus;
 import io.javalin.openapi.HttpMethod;
 import lombok.extern.slf4j.Slf4j;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.messaging.PluginMessageListener;
-import org.jetbrains.annotations.NotNull;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
-public class NetworkGateway implements PluginMessageListener {
+public class NetworkGateway {
 
-    private final CatWalkMain plugin;
+    private final DatabaseManager databaseManager;
+    private final NetworkRegistry networkRegistry;
     private final WebServer webServer;
-    private final Map<String, CompletableFuture<String>> pendingRequests = new ConcurrentHashMap<>();
-    private final Map<String, Long> serverLastSeen = new ConcurrentHashMap<>();
+    private final Plugin plugin;
+    private final Gson gson;
 
-    public NetworkGateway(CatWalkMain plugin, WebServer webServer) {
-        this.plugin = plugin;
+    private final Map<String, CompletableFuture<NetworkResponse>> pendingRequests = new ConcurrentHashMap<>();
+
+    private BukkitTask responsePollingTask;
+
+    public NetworkGateway(DatabaseManager databaseManager, NetworkRegistry networkRegistry,
+                          WebServer webServer, Plugin plugin) {
+        this.databaseManager = databaseManager;
+        this.networkRegistry = networkRegistry;
         this.webServer = webServer;
+        this.plugin = plugin;
+        this.gson = new Gson();
 
-        setupPluginMessaging();
-
-        log.info("[NetworkGateway] Initialized for hub server");
+        startResponsePolling();
+        log.info("[DatabaseHubGateway] Hub gateway initialized");
     }
 
-    private void setupPluginMessaging() {
-        // Register channels for Velocity communication
-        plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Constants.PLUGIN_CHANNEL);
-        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, Constants.PLUGIN_CHANNEL, this);
+    public void registerNetworkRoutes() {
+        networkRegistry.getAllNetworkAddons().thenAccept(addonsByServer -> {
+            int totalEndpoints = 0;
 
-        log.info("[NetworkGateway] Plugin messaging channels registered");
-    }
+            for (Map.Entry<String, List<ServerAddon>> serverEntry : addonsByServer.entrySet()) {
+                String serverId = serverEntry.getKey();
+                List<ServerAddon> addons = serverEntry.getValue();
 
-    // Create proxy routes for a remote addon
-    public void createProxyRoutes(String serverId, AddonInfo addonInfo) {
-        log.info("[NetworkGateway] Creating proxy routes for addon '{}' on server '{}'",
-                addonInfo.getName(), serverId);
-
-        for (EndpointInfo endpoint : addonInfo.getEndpoints()) {
-            for (HttpMethod method : endpoint.getMethods()) {
-                String proxyPath = "/v1/servers/" + serverId + endpoint.getPath();
-
-                // Create the proxy handler
-                switch (method) {
-                    case GET -> webServer.get(proxyPath, ctx -> handleProxyRequest(serverId, endpoint.getPath(), ctx));
-                    case POST ->
-                            webServer.post(proxyPath, ctx -> handleProxyRequest(serverId, endpoint.getPath(), ctx));
-                    case PUT -> webServer.put(proxyPath, ctx -> handleProxyRequest(serverId, endpoint.getPath(), ctx));
-                    case DELETE ->
-                            webServer.delete(proxyPath, ctx -> handleProxyRequest(serverId, endpoint.getPath(), ctx));
-                    default -> log.warn("[NetworkGateway] Unsupported HTTP method: {}", method);
+                for (ServerAddon addon : addons) {
+                    for (EndpointDefinition endpoint : addon.getEndpoints()) {
+                        registerProxyRoute(serverId, addon.getAddonName(), endpoint);
+                        totalEndpoints++;
+                    }
                 }
-
-                log.info("[NetworkGateway] Created proxy route: {} {} → {}:{}",
-                        method, proxyPath, serverId, endpoint.getPath());
             }
+
+            log.info("[DatabaseHubGateway] Registered {} proxy routes for {} servers",
+                    totalEndpoints, addonsByServer.size());
+        });
+
+        // Register network management routes
+        registerNetworkManagementRoutes();
+    }
+
+    private void registerProxyRoute(String serverId, String addonName, EndpointDefinition endpoint) {
+        String proxyPath = "/v1/servers/" + serverId + endpoint.getPath();
+
+        // Create proxy handler for each HTTP method
+        for (HttpMethod method : endpoint.getMethods()) {
+            HandlerType handlerType = convertHttpMethod(method);
+
+            webServer.addRoute(handlerType, proxyPath, ctx ->
+                    handleProxyRequest(serverId, endpoint.getPath(), ctx));
+
+            log.debug("[DatabaseHubGateway] Registered proxy route: {} {} → {}:{}",
+                    method, proxyPath, serverId, endpoint.getPath());
         }
     }
 
-    // Handle proxied request to remote server
-    private void handleProxyRequest(String serverId, String originalPath, Context ctx) {
+    private void registerNetworkManagementRoutes() {
+        // Network status endpoint
+        webServer.get("/v1/network/status", ctx -> {
+            networkRegistry.getAllServers().thenAccept(servers -> {
+                Map<String, Object> status = new HashMap<>();
+                status.put("hubServer", networkRegistry.getCurrentServerId());
+                status.put("timestamp", System.currentTimeMillis());
+                status.put("status", "active");
+                status.put("totalServers", servers.size());
+                status.put("onlineServers", servers.stream().mapToInt(s ->
+                        s.getStatus().name().equals("ONLINE") ? 1 : 0).sum());
+
+                ctx.json(status);
+            }).exceptionally(throwable -> {
+                log.error("[DatabaseHubGateway] Failed to get network status", throwable);
+                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .json(Map.of("error", "Failed to retrieve network status"));
+                return null;
+            });
+        });
+
+        // Network servers endpoint
+        webServer.get("/v1/network/servers", ctx -> {
+            networkRegistry.getAllServers().thenAccept(servers -> {
+                Map<String, Object> response = new HashMap<>();
+                response.put("servers", servers);
+                response.put("totalCount", servers.size());
+
+                ctx.json(response);
+            }).exceptionally(throwable -> {
+                log.error("[DatabaseHubGateway] Failed to get network servers", throwable);
+                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .json(Map.of("error", "Failed to retrieve network servers"));
+                return null;
+            });
+        });
+
+        // Network addons endpoint
+        webServer.get("/v1/network/addons", ctx -> {
+            networkRegistry.getAllNetworkAddons().thenAccept(addonsByServer -> {
+                Map<String, Object> response = new HashMap<>();
+                response.put("addonsByServer", addonsByServer);
+
+                int totalAddons = addonsByServer.values().stream()
+                        .mapToInt(List::size).sum();
+                response.put("totalAddons", totalAddons);
+
+                ctx.json(response);
+            }).exceptionally(throwable -> {
+                log.error("[DatabaseHubGateway] Failed to get network addons", throwable);
+                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .json(Map.of("error", "Failed to retrieve network addons"));
+                return null;
+            });
+        });
+
+        // Server-specific addon endpoint
+        webServer.get("/v1/network/servers/{serverId}/addons", ctx -> {
+            String serverId = ctx.pathParam("serverId");
+
+            networkRegistry.getServerAddons(serverId).thenAccept(addons -> {
+                Map<String, Object> response = new HashMap<>();
+                response.put("serverId", serverId);
+                response.put("addons", addons);
+                response.put("count", addons.size());
+
+                ctx.json(response);
+            }).exceptionally(throwable -> {
+                log.error("[DatabaseHubGateway] Failed to get addons for server {}", serverId, throwable);
+                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .json(Map.of("error", "Failed to retrieve server addons"));
+                return null;
+            });
+        });
+
+        log.info("[DatabaseHubGateway] Registered network management routes");
+    }
+
+    private void handleProxyRequest(String targetServerId, String originalPath, Context ctx) {
         String requestId = UUID.randomUUID().toString();
 
-        log.debug("[NetworkGateway] Proxying request {} to server '{}': {} {}",
-                requestId, serverId, ctx.method(), originalPath);
+        log.debug("[DatabaseHubGateway] Proxying request {} to server '{}': {} {}",
+                requestId, targetServerId, ctx.method(), originalPath);
 
-        // Check if target server is available
-        if (!isServerAvailable(serverId)) {
-            ctx.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .json(Map.of("error", "Target server '" + serverId + "' is not available"));
-            return;
-        }
+        // Check if target server is online
+        networkRegistry.getAllServers().thenAccept(servers -> {
+            boolean serverOnline = servers.stream()
+                    .anyMatch(s -> s.getServerId().equals(targetServerId) &&
+                            s.getStatus().name().equals("ONLINE"));
 
-        // Prepare request data
-        ProxyRequest proxyRequest = new ProxyRequest();
-        proxyRequest.setPath(originalPath);
-        proxyRequest.setMethod(ctx.method().name());
-        proxyRequest.setHeaders(ctx.headerMap());
-        proxyRequest.setQueryParams(ctx.queryParamMap());
-        proxyRequest.setBody(ctx.body());
+            if (!serverOnline) {
+                ctx.status(HttpStatus.SERVICE_UNAVAILABLE)
+                        .json(Map.of("error", "Target server '" + targetServerId + "' is not available"));
+                return;
+            }
 
-        // Create future for response
-        CompletableFuture<String> future = new CompletableFuture<>();
-        pendingRequests.put(requestId, future);
+            // Create the request
+            NetworkRequest request = NetworkRequest.builder()
+                    .requestId(requestId)
+                    .targetServerId(targetServerId)
+                    .endpointPath(originalPath)
+                    .httpMethod(convertJavalinMethod(ctx.method()))
+                    .headers(new HashMap<>(ctx.headerMap()))
+                    .queryParams(ctx.queryParamMap().entrySet().stream()
+                            .collect(HashMap::new, (map, entry) ->
+                                    map.put(entry.getKey(), String.join(",", entry.getValue())), HashMap::putAll))
+                    .body(ctx.body())
+                    .priority(0)
+                    .timeoutSeconds(30)
+                    .maxRetries(3)
+                    .status(NetworkRequest.RequestStatus.PENDING)
+                    .build();
 
-        // Send request to target server via plugin messaging
-        sendProxyRequest(serverId, requestId, proxyRequest);
+            // Store the request in database
+            storeRequest(request).thenCompose(success -> {
+                if (!success) {
+                    ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .json(Map.of("error", "Failed to queue request"));
+                    return CompletableFuture.completedFuture(null);
+                }
 
-        // Wait for response with timeout
-        future.orTimeout(30, TimeUnit.SECONDS)
-                .thenAccept(response -> {
-                    try {
-                        ProxyResponse proxyResponse = plugin.getGson().fromJson(response, ProxyResponse.class);
-
-                        // Set response status and headers
-                        ctx.status(proxyResponse.getStatusCode());
-                        proxyResponse.getHeaders().forEach(ctx::header);
-
-                        // Set response body
-                        if (proxyResponse.getBody() != null) {
-                            if (proxyResponse.getContentType().contains("application/json")) {
-                                ctx.json(proxyResponse.getBody());
-                            } else {
-                                ctx.result(proxyResponse.getBody());
-                            }
-                        }
-
-                    } catch (Exception e) {
-                        log.error("[NetworkGateway] Error processing proxy response for request {}", requestId, e);
-                        ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                                .json(Map.of("error", "Error processing response from target server"));
-                    }
-                })
-                .exceptionally(ex -> {
-                    log.error("[NetworkGateway] Proxy request {} to server '{}' failed", requestId, serverId, ex);
-
+                // Wait for response
+                return waitForResponse(requestId, request.getTimeoutSeconds());
+            }).thenAccept(response -> {
+                if (response != null) {
+                    handleProxyResponse(ctx, response);
+                } else {
+                    // Timeout or error
                     if (!ctx.res().isCommitted()) {
                         ctx.status(HttpStatus.GATEWAY_TIMEOUT)
                                 .json(Map.of("error", "Request to target server timed out"));
                     }
-                    return null;
-                });
+                }
+            }).exceptionally(throwable -> {
+                log.error("[DatabaseHubGateway] Proxy request {} failed", requestId, throwable);
+                if (!ctx.res().isCommitted()) {
+                    ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .json(Map.of("error", "Internal gateway error"));
+                }
+                return null;
+            });
+        });
     }
 
-    // Send proxy request via plugin messaging
-    private void sendProxyRequest(String serverId, String requestId, ProxyRequest request) {
+    private CompletableFuture<Boolean> storeRequest(NetworkRequest request) {
+        String sql = """
+                INSERT INTO request_queue (request_id, target_server_id, endpoint_path, http_method,
+                                         headers, query_params, body, priority, timeout_seconds, max_retries, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+
+        return databaseManager.executeUpdateAsync(sql, stmt -> {
+            stmt.setString(1, request.getRequestId());
+            stmt.setString(2, request.getTargetServerId());
+            stmt.setString(3, request.getEndpointPath());
+            stmt.setString(4, request.getHttpMethod().name());
+            stmt.setString(5, gson.toJson(request.getHeaders()));
+            stmt.setString(6, gson.toJson(request.getQueryParams()));
+            stmt.setString(7, request.getBody());
+            stmt.setInt(8, request.getPriority());
+            stmt.setInt(9, request.getTimeoutSeconds());
+            stmt.setInt(10, request.getMaxRetries());
+            stmt.setString(11, request.getStatus().name().toLowerCase());
+        }).thenApply(rowsAffected -> rowsAffected > 0);
+    }
+
+    private CompletableFuture<NetworkResponse> waitForResponse(String requestId, int timeoutSeconds) {
+        CompletableFuture<NetworkResponse> future = new CompletableFuture<>();
+        pendingRequests.put(requestId, future);
+
+        // Set timeout
+        plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, () -> {
+            CompletableFuture<NetworkResponse> removed = pendingRequests.remove(requestId);
+            if (removed != null && !removed.isDone()) {
+                removed.completeExceptionally(new RuntimeException("Request timeout"));
+            }
+        }, timeoutSeconds * 20L); // Convert to ticks
+
+        return future;
+    }
+
+    private void handleProxyResponse(Context ctx, NetworkResponse response) {
         try {
-            ByteArrayDataOutput out = ByteStreams.newDataOutput();
-            out.writeUTF("Forward");
-            out.writeUTF(serverId);
-            out.writeUTF("catwalk:proxy");
+            // Set response status and headers
+            ctx.status(response.getStatusCode());
 
-            // Serialize request data
-            ByteArrayDataOutput requestData = ByteStreams.newDataOutput();
-            requestData.writeUTF("proxy_request");
-            requestData.writeUTF(requestId);
-            requestData.writeUTF(plugin.getGson().toJson(request));
+            if (response.getHeaders() != null) {
+                response.getHeaders().forEach((key, value) -> {
+                    if (!key.equalsIgnoreCase("content-length")) {
+                        ctx.header(key, value);
+                    }
+                });
+            }
 
-            out.writeShort(requestData.toByteArray().length);
-            out.write(requestData.toByteArray());
-
-            // Send via Velocity
-            Player player = plugin.getServer().getOnlinePlayers().iterator().next();
-            if (player != null) {
-                player.sendPluginMessage(plugin, Constants.PLUGIN_CHANNEL, out.toByteArray());
-                log.debug("[NetworkGateway] Sent proxy request {} to server '{}'", requestId, serverId);
-            } else {
-                log.error("[NetworkGateway] No online players to send plugin message");
-                CompletableFuture<String> future = pendingRequests.remove(requestId);
-                if (future != null) {
-                    future.completeExceptionally(new RuntimeException("No online players for plugin messaging"));
+            // Set response body
+            if (response.getBody() != null) {
+                if (response.getContentType() != null && response.getContentType().contains("application/json")) {
+                    ctx.json(response.getBody());
+                } else {
+                    ctx.result(response.getBody());
                 }
             }
 
+            log.debug("[DatabaseHubGateway] Proxy response completed in {}ms",
+                    response.getProcessedTimeMs());
+
         } catch (Exception e) {
-            log.error("[NetworkGateway] Error sending proxy request {} to server '{}'", requestId, serverId, e);
-            CompletableFuture<String> future = pendingRequests.remove(requestId);
-            if (future != null) {
-                future.completeExceptionally(e);
+            log.error("[DatabaseHubGateway] Error handling proxy response", e);
+            if (!ctx.res().isCommitted()) {
+                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .json(Map.of("error", "Error processing response from target server"));
             }
         }
     }
 
-    @Override
-    public void onPluginMessageReceived(@NotNull String channel, @NotNull Player player, byte @NotNull [] message) {
-        log.info("[RequestHandler] Received channel '{}' from '{}'", channel, player.getName());
-        if (!Constants.PLUGIN_CHANNEL.equals(channel)) return;
+    private void startResponsePolling() {
+        responsePollingTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                pollForResponses();
+            }
+        }.runTaskTimerAsynchronously(plugin, 20L, 40L); // Every 2 seconds
+
+        log.info("[DatabaseHubGateway] Started response polling");
+    }
+
+    private void pollForResponses() {
+        if (pendingRequests.isEmpty()) {
+            return;
+        }
 
         try {
-            ByteArrayDataInput in = ByteStreams.newDataInput(message);
-            String messageType = in.readUTF();
 
-            switch (messageType) {
-                case "proxy_response":
-                    handleProxyResponse(in);
-                    break;
-                case "server_announcement":
-                    handleServerAnnouncement(in);
-                    break;
-                case "addon_announcement":
-                    handleAddonAnnouncement(in);
-                    break;
-                default:
-                    log.warn("[NetworkGateway] Unknown message type: {}", messageType);
+            String sql = "SELECT * FROM response_queue " +
+                    "WHERE request_id IN (" +
+                    String.join(",", Collections.nCopies(pendingRequests.size(), "?")) +
+                    ") ORDER BY created_at ASC";
+
+            List<NetworkResponse> responses = databaseManager.executeQuery(sql, stmt -> {
+                int index = 1;
+                for (String requestId : pendingRequests.keySet()) {
+                    stmt.setString(index++, requestId);
+                }
+            }, rs -> {
+                List<NetworkResponse> list = new ArrayList<>();
+                while (rs.next()) {
+                    list.add(mapResultSetToResponse(rs));
+                }
+                return list;
+            });
+
+            // Complete the futures
+            for (NetworkResponse response : responses) {
+                CompletableFuture<NetworkResponse> future = pendingRequests.remove(response.getRequestId());
+                if (future != null && !future.isDone()) {
+                    future.complete(response);
+                }
+            }
+
+            // Clean up processed responses
+            if (!responses.isEmpty()) {
+                cleanupProcessedResponses(responses);
             }
 
         } catch (Exception e) {
-            log.error("[NetworkGateway] Error processing plugin message", e);
+            log.error("[DatabaseHubGateway] Error polling for responses", e);
         }
     }
 
-    private void handleProxyResponse(ByteArrayDataInput in) {
-        String requestId = in.readUTF();
-        String response = in.readUTF();
+    private void cleanupProcessedResponses(List<NetworkResponse> responses) {
+        if (responses.isEmpty()) return;
 
-        CompletableFuture<String> future = pendingRequests.remove(requestId);
-        if (future != null) {
-            future.complete(response);
-            log.debug("[NetworkGateway] Completed proxy request {}", requestId);
-        } else {
-            log.warn("[NetworkGateway] Received response for unknown request: {}", requestId);
-        }
+        String sql = "DELETE FROM response_queue WHERE request_id IN (" +
+                String.join(",", Collections.nCopies(responses.size(), "?")) + ")";
+
+        databaseManager.executeUpdateAsync(sql, stmt -> {
+            int index = 1;
+            for (NetworkResponse response : responses) {
+                stmt.setString(index++, response.getRequestId());
+            }
+        });
     }
 
-    private void handleServerAnnouncement(ByteArrayDataInput in) {
-        String serverId = in.readUTF();
-        String serverInfoJson = in.readUTF();
-
-        serverLastSeen.put(serverId, System.currentTimeMillis());
-
-        log.info("[NetworkGateway] Server '{}' announced itself to the network", serverId);
-
-        // You can parse serverInfoJson and store server metadata if needed
-    }
-
-    private void handleAddonAnnouncement(ByteArrayDataInput in) {
-        String serverId = in.readUTF();
-        String addonInfoJson = in.readUTF();
+    private NetworkResponse mapResultSetToResponse(java.sql.ResultSet rs) throws java.sql.SQLException {
+        Map<String, String> headers = null;
 
         try {
-            AddonInfo addonInfo = plugin.getGson().fromJson(addonInfoJson, AddonInfo.class);
-            plugin.getAddonRegistry().registerRemoteAddon(serverId, addonInfo);
-
-            log.info("[NetworkGateway] Registered remote addon '{}' from server '{}'",
-                    addonInfo.getName(), serverId);
-
+            String headersJson = rs.getString("headers");
+            if (headersJson != null) {
+                headers = gson.fromJson(headersJson, Map.class);
+            }
         } catch (Exception e) {
-            log.error("[NetworkGateway] Error parsing addon announcement from server '{}'", serverId, e);
+            log.warn("[DatabaseHubGateway] Failed to parse response headers");
         }
+
+        return NetworkResponse.builder()
+                .requestId(rs.getString("request_id"))
+                .serverId(rs.getString("server_id"))
+                .statusCode(rs.getInt("status_code"))
+                .headers(headers)
+                .body(rs.getString("body"))
+                .contentType(rs.getString("content_type"))
+                .processedTimeMs(rs.getObject("processed_time_ms", Integer.class))
+                .createdAt(rs.getTimestamp("created_at"))
+                .build();
     }
 
-    private boolean isServerAvailable(String serverId) {
-        Long lastSeen = serverLastSeen.get(serverId);
-        if (lastSeen == null) return false;
+    private HandlerType convertHttpMethod(HttpMethod method) {
+        return switch (method) {
+            case GET -> HandlerType.GET;
+            case POST -> HandlerType.POST;
+            case PUT -> HandlerType.PUT;
+            case DELETE -> HandlerType.DELETE;
+            case PATCH -> HandlerType.PATCH;
+            default -> throw new IllegalArgumentException("Unsupported HTTP method: " + method);
+        };
+    }
 
-        // Consider server available if seen within last 2 minutes
-        return (System.currentTimeMillis() - lastSeen) < 120000;
+    private NetworkRequest.HttpMethod convertJavalinMethod(HandlerType method) {
+        return NetworkRequest.HttpMethod.valueOf(method.name());
     }
 
     public void shutdown() {
-        log.info("[NetworkGateway] Shutting down network gateway");
-        pendingRequests.values().forEach(future ->
-                future.completeExceptionally(new RuntimeException("Gateway shutting down")));
+        if (responsePollingTask != null) {
+            responsePollingTask.cancel();
+        }
+
+        pendingRequests.values().forEach(future -> {
+            if (!future.isDone()) {
+                future.completeExceptionally(new RuntimeException("Gateway shutting down"));
+            }
+        });
         pendingRequests.clear();
-    }
 
-    // Data classes for proxy requests/responses
-    @lombok.Data
-    public static class ProxyRequest {
-        private String path;
-        private String method;
-        private Map<String, String> headers;
-        private Map<String, java.util.List<String>> queryParams;
-        private String body;
-    }
-
-    @lombok.Data
-    public static class ProxyResponse {
-        private int statusCode = 200;
-        private Map<String, String> headers = new java.util.HashMap<>();
-        private String body;
-        private String contentType = "application/json";
+        log.info("[DatabaseHubGateway] Hub gateway shut down");
     }
 }

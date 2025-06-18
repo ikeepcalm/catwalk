@@ -2,7 +2,7 @@ package dev.ua.uaproject.catwalk.hub.webserver.services;
 
 import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.bridge.BridgeEventHandlerProcessor;
-import dev.ua.uaproject.catwalk.hub.network.RequestHandler;
+import dev.ua.uaproject.catwalk.hub.network.NetworkRegistry;
 import dev.ua.uaproject.catwalk.hub.webserver.WebServer;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -18,14 +18,14 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
 
     private final WebServer webServer;
     private final BridgeEventHandlerProcessor bridgeProcessor;
-    private final RequestHandler requestHandler;  // NEW
+    private final NetworkRegistry networkRegistry;
+    private final CatWalkMain plugin;
 
     public CatWalkWebserverServiceImpl(CatWalkMain main) {
+        this.plugin = main;
         this.webServer = main.getWebServer();
+        this.networkRegistry = main.getNetworkRegistry();
         this.bridgeProcessor = new BridgeEventHandlerProcessor(LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class));
-
-        // NEW - Initialize request handler for non-hub servers
-        this.requestHandler = main.isHubMode() ? null : new RequestHandler(main);
     }
 
     @Override
@@ -60,34 +60,30 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
 
     @Override
     public void registerHandlers(Object handlerInstance) {
-        // Get the plugin name from the handler's package or class
         String pluginName = extractPluginName(handlerInstance);
-
-        // Register with bridge processor
         bridgeProcessor.registerHandler(handlerInstance, pluginName, null);
-
-        // NEW - Register with addon registry for network discovery
-        CatWalkMain.instance.getAddonRegistry().registerLocalAddon(pluginName, handlerInstance);
+        networkRegistry.registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
+        LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class).info("[CatWalkWebserverService] Registered addon '{}' for server '{}'", pluginName, plugin.getServerId());
     }
 
-    // NEW - Extract plugin name from handler instance
     private String extractPluginName(Object handlerInstance) {
         String className = handlerInstance.getClass().getSimpleName();
 
-        // Try to extract plugin name from class name
-        // e.g., "GraylistCatwalk" -> "graylist"
         if (className.endsWith("Catwalk")) {
             return className.substring(0, className.length() - 7).toLowerCase();
         }
 
-        // Try to extract from package name
         String packageName = handlerInstance.getClass().getPackage().getName();
         String[] parts = packageName.split("\\.");
         if (parts.length > 0) {
-            return parts[parts.length - 1].toLowerCase();
+            for (int i = parts.length - 1; i >= 0; i--) {
+                String part = parts[i];
+                if (!part.equals("catwalk") && !part.equals("bridge") && !part.equals("api") && !part.equals("handlers")) {
+                    return part.toLowerCase();
+                }
+            }
         }
 
-        // Fallback to class name
         return className.toLowerCase();
     }
 
@@ -141,12 +137,10 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
                 ctx.status(HttpStatus.OK).json(result);
             }
         } catch (Exception e) {
-            LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class)
-                    .error("Error processing request: {}", e.getMessage(), e);
+            LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class).error("Error processing request: {}", e.getMessage(), e);
 
             if (!ctx.res().isCommitted()) {
-                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .json(new ErrorResponse("Internal server error", e.getMessage()));
+                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(new ErrorResponse("Internal server error", e.getMessage()));
             }
         }
     }
