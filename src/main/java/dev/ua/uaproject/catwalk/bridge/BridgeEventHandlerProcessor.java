@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.bridge.annotations.BridgeEventHandler;
 import dev.ua.uaproject.catwalk.bridge.annotations.BridgePathParam;
-import dev.ua.uaproject.catwalk.utils.json.GsonSingleton;
-import dev.ua.uaproject.catwalk.webserver.WebServer;
+import dev.ua.uaproject.catwalk.common.utils.json.GsonSingleton;
+import dev.ua.uaproject.catwalk.hub.webserver.WebServer;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import io.javalin.openapi.HttpMethod;
@@ -120,22 +120,22 @@ public class BridgeEventHandlerProcessor {
                     pathParams.put(paramName, paramValue);
                 }
             }
-    
+
             // Check if the method has path parameter annotations
-            boolean hasPathParameters = method.getParameters().length > 0 && 
+            boolean hasPathParameters = method.getParameters().length > 0 &&
                                         Arrays.stream(method.getParameters())
-                                              .anyMatch(p -> p.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class) || 
+                                              .anyMatch(p -> p.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class) ||
                                                           p.isAnnotationPresent(BridgePathParam.class));
-    
+
             // Parse request body if needed
             Object requestBody = null;
             if (paramType != null && !paramType.equals(Void.class)) {
                 requestBody = deserializeRequestBody(context, paramType, pathParams);
             }
-    
+
             // Invoke the method and handle the result
             Object result;
-            
+
             if (hasPathParameters) {
                 // Handle methods with path parameters
                 Object[] args = prepareMethodArguments(method, context, requestBody, pathParams);
@@ -191,20 +191,20 @@ public class BridgeEventHandlerProcessor {
     }
 
     /**
-     * Gets the type of the method parameter that will receive the request body, 
+     * Gets the type of the method parameter that will receive the request body,
      * or null if it has no parameters or only has path parameters.
      */
     private Class<?> getMethodParamType(Method method) {
         if (method.getParameterCount() == 0) {
             return null;
         }
-        
+
         // If there are multiple parameters, we need to check for path parameters
         if (method.getParameterCount() > 1) {
             // Check if all parameters except one are annotated with OpenApiParam or PathParam
             Parameter[] parameters = method.getParameters();
             Parameter nonPathParam = null;
-            
+
             for (Parameter param : parameters) {
                 if (!isPathParameter(param) && !param.getType().equals(Context.class)) {
                     if (nonPathParam != null) {
@@ -214,25 +214,25 @@ public class BridgeEventHandlerProcessor {
                     nonPathParam = param;
                 }
             }
-            
+
             // If we found exactly one non-path parameter, return its type
             if (nonPathParam != null) {
                 return nonPathParam.getType();
             }
-            
+
             // All parameters are path parameters
             return null;
         }
-        
+
         // Only one parameter - check if it's a path parameter
         Parameter param = method.getParameters()[0];
         if (isPathParameter(param)) {
             return null; // It's a path parameter, no request body needed
         }
-        
+
         return method.getParameterTypes()[0];
     }
-    
+
     /**
      * Checks if a parameter is a path parameter (has either OpenApiParam or PathParam annotation)
      */
@@ -254,7 +254,7 @@ public class BridgeEventHandlerProcessor {
         // Choose deserialization method based on content type
         String contentType = context.contentType();
         Object instance;
-        
+
         if (contentType != null && contentType.contains("application/json")) {
             // Create from JSON body
             instance = objectMapper.readValue(context.body(), paramType);
@@ -280,14 +280,14 @@ public class BridgeEventHandlerProcessor {
                 instance = paramType.getDeclaredConstructor().newInstance();
             }
         }
-        
+
         // Now populate any path parameters that match field names
         if (!pathParams.isEmpty()) {
             for (java.lang.reflect.Field field : paramType.getDeclaredFields()) {
                 field.setAccessible(true);
                 String fieldName = field.getName();
                 String pathValue = pathParams.get(fieldName);
-                
+
                 if (pathValue != null) {
                     // Convert the string value to the field's type
                     Object convertedValue = convertStringToType(pathValue, field.getType());
@@ -295,7 +295,7 @@ public class BridgeEventHandlerProcessor {
                 }
             }
         }
-        
+
         return instance;
     }
 
@@ -322,7 +322,7 @@ public class BridgeEventHandlerProcessor {
             }
         }
     }
-    
+
     /**
      * Prepares an array of arguments to be passed to the handler method.
      * Supports path parameters and request body.
@@ -336,25 +336,25 @@ public class BridgeEventHandlerProcessor {
     private Object[] prepareMethodArguments(Method method, Context context, Object requestBody, Map<String, String> pathParams) {
         Parameter[] parameters = method.getParameters();
         Object[] args = new Object[parameters.length];
-        
+
         for (int i = 0; i < parameters.length; i++) {
             Parameter parameter = parameters[i];
-            
+
             // Handle OpenApiParam path parameters (backward compatibility)
             if (parameter.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class)) {
                 io.javalin.openapi.OpenApiParam paramAnnotation = parameter.getAnnotation(io.javalin.openapi.OpenApiParam.class);
                 String paramName = paramAnnotation.name();
                 String paramValue = context.pathParam(paramName);
-                
+
                 // Convert the string value to the parameter's type
                 args[i] = convertStringToType(paramValue, parameter.getType());
-            } 
+            }
             // Handle our custom PathParam annotation
             else if (parameter.isAnnotationPresent(BridgePathParam.class)) {
                 BridgePathParam paramAnnotation = parameter.getAnnotation(BridgePathParam.class);
                 String paramName = paramAnnotation.value();
                 String paramValue = context.pathParam(paramName);
-                
+
                 // Convert the string value to the parameter's type
                 args[i] = convertStringToType(paramValue, parameter.getType());
             }
@@ -371,7 +371,7 @@ public class BridgeEventHandlerProcessor {
                 args[i] = null;
             }
         }
-        
+
         return args;
     }
 }

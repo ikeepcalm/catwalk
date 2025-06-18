@@ -1,7 +1,7 @@
-package dev.ua.uaproject.catwalk.api.v1;
+package dev.ua.uaproject.catwalk.hub.api.v1;
 
-import dev.ua.uaproject.catwalk.stats.StatsManager;
-import dev.ua.uaproject.catwalk.utils.LagDetector;
+import dev.ua.uaproject.catwalk.hub.api.stats.StatsManager;
+import dev.ua.uaproject.catwalk.common.utils.LagDetector;
 import io.javalin.http.Context;
 import io.javalin.openapi.OpenApi;
 import io.javalin.openapi.OpenApiContent;

@@ -1,4 +1,4 @@
-package dev.ua.uaproject.catwalk.utils.json;
+package dev.ua.uaproject.catwalk.common.utils.json;
 
 import com.google.gson.Gson;
 

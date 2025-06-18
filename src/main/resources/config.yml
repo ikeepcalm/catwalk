@@ -1,44 +1,218 @@
-port: 4567
-debug: false
-useKeyAuth: true
-key: 'changed'
-normalizeMessages: true
+  # =================================================================
+  # CatWalk Hub Gateway Configuration Template
+  # =================================================================
 
-# TLS (a.k.a. SSL) options
-tls:
-  # Set to true to enable TLS
-  enabled: false
-  # The path to your keystore (relative to CatWalk's plugin dir)
-  keystore: keystore.jks
-  # The password for the keystore
-  keystorePassword: ""
-  # Enforce Server Name Indication (SNI) or not
-  sni: false
+  # =================================================================
+  # CORE WEB SERVER SETTINGS
+  # =================================================================
 
-# Use this list to set allowed CORS Origins ("*" by default)
-corsOrigins:
-  - "*"
+  # Port for the web server (only matters for hub servers and standalone servers)
+  port: 4567
 
-# Example webhook configuration
-#webhooks:
-#  default:
-#    listener: "https://your-webhook-target.com/whatever"
-#    events:
-#      - PlayerJoin
-#      - PlayerQuit
-#      - PlayerKick
-#      - PlayerDeath
-#      - PlayerChat
+  # Enable debug logging
+  debug: false
 
-# Number of console log lines to send when websocket connections are opened
-# Set to 0 to effectively disable this
-websocketConsoleBuffer: 1000
+  # Enable authentication for API endpoints
+  useKeyAuth: true
 
-# If you do not wish to show the swagger UI you can disable it here
-disable-swagger: false
+  # API authentication key (CHANGE THIS!)
+  key: 'change_me_to_secure_random_string'
 
-# Use this feature to configure paths that will be blocked. Put in the exact paths shown by swagger.
-blocked-paths:
-# - /v1/ping
-# - /v1/players/{uuid}
-# - /v1/server/*
+  # Normalize chat messages
+  normalizeMessages: true
+
+  # =================================================================
+  # HUB GATEWAY SETTINGS (NEW)
+  # =================================================================
+
+  hub:
+    # Whether this server acts as a network hub
+    # Set to true ONLY on your lobby server
+    enabled: false
+
+    # Unique identifier for this server in the network
+    # Examples: "lobby", "survival", "creative", "hub", "beta", "vanilla", "heavy"
+    server-id: "unknown"
+
+    # Whether this server should announce itself and its addons to the network
+    # Set to true for backend servers, false for hub servers
+    announce-to-network: false
+
+    # How often to announce server status to network (seconds)
+    announcement-interval: 60
+
+    # Timeout for proxy requests (seconds)
+    proxy-timeout: 30
+
+    # Enable automatic proxy route generation
+    auto-proxy: true
+
+  # =================================================================
+  # TLS/SSL SETTINGS
+  # =================================================================
+
+  tls:
+    # Enable TLS/SSL encryption
+    enabled: false
+
+    # Path to keystore file (relative to plugin folder)
+    keystore: keystore.jks
+
+    # Keystore password
+    keystorePassword: ""
+
+    # Enforce Server Name Indication (SNI)
+    sni: false
+
+  # =================================================================
+  # CORS SETTINGS
+  # =================================================================
+
+  # Allowed CORS origins
+  # Use ["*"] to allow all origins (not recommended for production)
+  corsOrigins:
+    - "*"
+    # Examples for production:
+    # - "https://yourdomain.com"
+    # - "https://dashboard.yourserver.net"
+    # - "http://localhost:3000"
+
+  # =================================================================
+  # WEBSOCKET SETTINGS
+  # =================================================================
+
+  # Number of console log lines to buffer for websocket connections
+  # Set to 0 to disable console streaming
+  websocketConsoleBuffer: 1000
+
+  # =================================================================
+  # API DOCUMENTATION
+  # =================================================================
+
+  # Disable Swagger UI (set to true to hide API documentation)
+  disable-swagger: false
+
+  # =================================================================
+  # SECURITY SETTINGS
+  # =================================================================
+
+  # Paths that should be blocked from API access
+  # Use this to disable specific endpoints
+  blocked-paths: []
+    # Examples:
+    # - "/v1/server/stop"
+    # - "/v1/players/*/kick"
+  # - "/v1/console/*"
+
+  # Paths that don't require authentication (whitelist)
+  # These paths will be accessible without API key
+  whitelisted-paths:
+    - "/swagger*"
+    - "/redoc*"
+    - "/openapi.json"
+    - "/v1/network/status"
+    # Examples:
+    # - "/v1/server/status"
+    # - "/v1/stats/summary"
+
+  # =================================================================
+  # ADDON SETTINGS (NEW)
+  # =================================================================
+
+  addons:
+    # Enable automatic addon discovery and registration
+    auto-discovery: true
+
+    # Addon-specific settings
+    # You can configure addon behavior here
+    settings:
+      graylist:
+        enabled: true
+        # Custom settings for Graylist addon
+      towny:
+        enabled: true
+        # Custom settings for Towny addon
+      magic:
+        enabled: true
+        # Custom settings for Magic addon
+
+  # =================================================================
+  # NETWORK DISCOVERY SETTINGS (NEW)
+  # =================================================================
+
+  network:
+    # Enable network discovery features
+    discovery:
+      enabled: true
+
+      # How long to wait for server responses (seconds)
+      timeout: 10
+
+      # How long to cache server information (seconds)
+      cache-duration: 300
+
+      # Retry failed requests to other servers
+      retry-failed: true
+
+      # Maximum retries for failed requests
+      max-retries: 3
+
+  # =================================================================
+  # PERFORMANCE SETTINGS
+  # =================================================================
+
+  performance:
+    # Thread pool size for async operations
+    thread-pool-size: 4
+
+    # Maximum concurrent proxy requests
+    max-concurrent-requests: 50
+
+    # Request queue size
+    request-queue-size: 1000
+
+  # =================================================================
+  # LOGGING SETTINGS
+  # =================================================================
+
+  logging:
+    # Log all API requests (can be verbose)
+    log-requests: false
+
+    # Log network communications
+    log-network: false
+
+    # Log addon registrations
+    log-addons: true
+
+    # Log proxy requests
+    log-proxy: false
+
+  # =================================================================
+  # EXAMPLE CONFIGURATIONS
+  # =================================================================
+
+  # Hub Server (Lobby) Example:
+  # hub:
+  #   enabled: true
+  #   server-id: "lobby"
+  #   announce-to-network: false
+  #   auto-proxy: true
+
+  # Backend Server (Survival) Example:
+  # hub:
+  #   enabled: false
+  #   server-id: "survival"
+  #   announce-to-network: true
+
+  # Backend Server (Creative) Example:
+  # hub:
+  #   enabled: false
+  #   server-id: "creative"
+  #   announce-to-network: true
+
+  # Standalone Server (No Network) Example:
+  # hub:
+  #   enabled: false
+  #   server-id: "standalone"
+  #   announce-to-network: false

@@ -1,4 +1,4 @@
-package dev.ua.uaproject.catwalk.utils;
+package dev.ua.uaproject.catwalk.common.utils;
 
 public class LagDetector implements Runnable {
 

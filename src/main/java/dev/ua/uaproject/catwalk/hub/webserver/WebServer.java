@@ -1,7 +1,7 @@
-package dev.ua.uaproject.catwalk.webserver;
+package dev.ua.uaproject.catwalk.hub.webserver;
 
 import dev.ua.uaproject.catwalk.CatWalkMain;
-import dev.ua.uaproject.catwalk.utils.json.GsonJsonMapper;
+import dev.ua.uaproject.catwalk.common.utils.json.GsonJsonMapper;
 import io.javalin.Javalin;
 import io.javalin.community.ssl.SslPlugin;
 import io.javalin.config.JavalinConfig;
@@ -85,11 +85,11 @@ public class WebServer {
                 String token = authHeader.substring(7);
                 if (Objects.equals(token, authKey)) {
                     if (isDebug) {
-                        log.info("[CatWalk] Auth successful via Bearer token for: " + ctx.req().getPathInfo());
+                        log.info("Auth successful via Bearer token for: " + ctx.req().getPathInfo());
                     }
                     return;
                 } else {
-                    log.warning("[CatWalk] Invalid Bearer token provided: " + token.substring(0, Math.min(token.length(), 5)) + "...");
+                    log.warning("Invalid Bearer token provided: " + token.substring(0, Math.min(token.length(), 5)) + "...");
                 }
             }
 
@@ -97,15 +97,13 @@ public class WebServer {
             String authCookie = ctx.cookie(X_CATWALK_COOKIE);
             if (authCookie != null && Objects.equals(authCookie, authKey)) {
                 if (isDebug) {
-                    log.info("[CatWalk] Auth successful via cookie for: " + ctx.req().getPathInfo());
+                    log.info("Auth successful via cookie for: " + ctx.req().getPathInfo());
                 }
                 return;
             }
 
             throw new UnauthorizedResponse("Authentication required. Use Bearer token authentication.");
         });
-
-        javalin.get("/swagger", ctx -> ctx.redirect("/swagger.html"));
 
         if (bukkitConfig.getBoolean("debug")) {
             this.javalin.before(ctx -> log.info(ctx.req().getPathInfo()));
@@ -121,9 +119,9 @@ public class WebServer {
         configureCors(config);
 
         if (isAuthEnabled && "change_me".equals(authKey)) {
-            log.warning("[CatWalk] AUTH KEY IS SET TO DEFAULT \"change_me\"");
-            log.warning("[CatWalk] CHANGE THE key IN THE config.yml FILE");
-            log.warning("[CatWalk] FAILURE TO CHANGE THE KEY MAY RESULT IN SERVER COMPROMISE");
+            log.warning("AUTH KEY IS SET TO DEFAULT \"change_me\"");
+            log.warning("CHANGE THE key IN THE config.yml FILE");
+            log.warning("FAILURE TO CHANGE THE KEY MAY RESULT IN SERVER COMPROMISE");
         }
 
         if (!disableSwagger) {
@@ -154,21 +152,22 @@ public class WebServer {
                 });
             });
 
-            config.staticFiles.add(staticFiles -> {
-                staticFiles.directory = "/public";
-                staticFiles.hostedPath = "/";
-                staticFiles.location = Location.CLASSPATH;
-            });
+//            config.staticFiles.add(staticFiles -> {
+//                staticFiles.directory = "/public";
+//                staticFiles.hostedPath = "/";
+//                staticFiles.location = Location.CLASSPATH;
+//            });
             config.registerPlugin(openApiPlugin);
 
             // Register Swagger and Redoc plugin
             config.registerPlugin(new SwaggerPlugin(configuration -> {
                 configuration.setUiPath("/plainswagger");
             }));
+
             config.registerPlugin(new ReDocPlugin());
 
-            log.info("[CatWalk] Swagger UI enabled at /swagger");
-            log.info("[CatWalk] ReDoc UI enabled at /redoc");
+            log.info("Swagger UI enabled at /swagger");
+            log.info("ReDoc UI enabled at /redoc");
         }
     }
 
@@ -200,11 +199,11 @@ public class WebServer {
     private void configureCors(JavalinConfig config) {
         config.bundledPlugins.enableCors(cors -> cors.addRule(corsConfig -> {
             if (corsOrigin.contains("*")) {
-                log.info("[CatWalk] Enabling CORS for *");
+                log.info("Enabling CORS for *");
                 corsConfig.anyHost();
             } else {
                 corsOrigin.forEach(origin -> {
-                    log.info(String.format("[CatWalk] Enabling CORS for %s", origin));
+                    log.info(String.format("Enabling CORS for %s", origin));
                     corsConfig.allowHost(origin);
                 });
             }
@@ -213,7 +212,7 @@ public class WebServer {
 
     private void configureTLS(JavalinConfig config, CatWalkMain main) {
         if (!tlsEnabled) {
-            log.warning("[CatWalk] TLS is not enabled.");
+            log.warning("TLS is not enabled.");
             return;
         }
         try {
@@ -230,13 +229,13 @@ public class WebServer {
                 });
 
                 config.registerPlugin(plugin);
-                log.info("[CatWalk] TLS is enabled.");
+                log.info("TLS is enabled.");
             } else {
-                log.warning(String.format("[CatWalk] TLS is enabled but %s doesn't exist. TLS disabled.", fullKeystorePath));
+                log.warning(String.format("TLS is enabled but %s doesn't exist. TLS disabled.", fullKeystorePath));
             }
         } catch (Exception e) {
-            log.severe("[CatWalk] Error while enabling TLS: " + e.getMessage());
-            log.warning("[CatWalk] TLS is not enabled.");
+            log.severe("Error while enabling TLS: " + e.getMessage());
+            log.warning("TLS is not enabled.");
         }
     }
 

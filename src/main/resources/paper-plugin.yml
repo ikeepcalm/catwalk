@@ -1,0 +1,13 @@
+name: CatWalk
+main: dev.ua.uaproject.catwalk.CatWalkMain
+loader: dev.ua.uaproject.catwalk.CatWalkLoader
+version: 0.7-SNAPSHOT
+description: CatWalk REST API with Hub Gateway
+authors:
+  - THEROER
+  - ikeepcalm
+load: STARTUP
+api-version: 1.21
+permissions:
+  catwalk.admin:
+    default: op

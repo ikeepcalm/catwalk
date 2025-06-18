@@ -1,4 +1,4 @@
-package dev.ua.uaproject.catwalk.stats;
+package dev.ua.uaproject.catwalk.hub.api.stats;
 
 import dev.ua.uaproject.catwalk.CatWalkMain;
 import org.bukkit.Bukkit;

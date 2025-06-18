@@ -1,4 +1,4 @@
-package dev.ua.uaproject.catwalk.stats;
+package dev.ua.uaproject.catwalk.hub.api.stats;
 
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
