@@ -146,11 +146,7 @@ public class CatWalkMain extends JavaPlugin {
 
     private void initializeHubComponents() {
         log.info("Initializing Hub Gateway components...");
-
-        // Initialize hub gateway for handling proxy requests
         this.hubGateway = new NetworkGateway(databaseManager, networkRegistry, app, this);
-
-        // Register network proxy routes (done asynchronously after server discovery)
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
             hubGateway.registerNetworkRoutes();
             log.info("Hub Gateway proxy routes registered");
@@ -162,7 +158,6 @@ public class CatWalkMain extends JavaPlugin {
     private void initializeBackendComponents() {
         log.info("Initializing Backend Server components...");
 
-        // Initialize request processor for handling incoming requests from hub
         int localPort = getConfig().getInt("port", 4567);
         this.requestProcessor = new RequestProcessor(databaseManager, serverId, this, localPort);
 
@@ -170,16 +165,13 @@ public class CatWalkMain extends JavaPlugin {
     }
 
     private void registerCoreApiRoutes() {
-        // Register core API routes
         ApiV1Initializer api = new ApiV1Initializer(this, log, lagDetector, statsManager);
         registerStatsApi(api);
 
-        // Add basic routes
         WebServerRoutes.addBasicRoutes(this, log, app);
 
         if (isHubMode) {
-            // Add hub-specific routes
-            WebServerRoutes.addHubRoutes(this, log, null, app); // hubGateway handles proxy routes
+            WebServerRoutes.addHubRoutes(this, log, app); // hubGateway handles proxy routes
         }
     }
 

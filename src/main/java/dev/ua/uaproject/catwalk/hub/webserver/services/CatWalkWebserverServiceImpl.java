@@ -61,9 +61,15 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
     @Override
     public void registerHandlers(Object handlerInstance) {
         String pluginName = extractPluginName(handlerInstance);
-        bridgeProcessor.registerHandler(handlerInstance, pluginName, null);
-        networkRegistry.registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
-        LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class).info("[CatWalkWebserverService] Registered addon '{}' for server '{}'", pluginName, plugin.getServerId());
+
+        if (plugin.isHubMode()) {
+            networkRegistry.registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
+            LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class).info("[CatWalkWebserverService] Registered addon '{}' for hub server '{}' (proxy routes only)", pluginName, plugin.getServerId());
+        } else {
+            bridgeProcessor.registerHandler(handlerInstance, pluginName);
+            networkRegistry.registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
+            LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class).info("[CatWalkWebserverService] Registered addon '{}' for backend server '{}'", pluginName, plugin.getServerId());
+        }
     }
 
     private String extractPluginName(Object handlerInstance) {

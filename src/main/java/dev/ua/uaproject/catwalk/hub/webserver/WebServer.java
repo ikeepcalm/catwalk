@@ -8,7 +8,7 @@ import io.javalin.config.JavalinConfig;
 import io.javalin.http.Handler;
 import io.javalin.http.HandlerType;
 import io.javalin.http.UnauthorizedResponse;
-import io.javalin.openapi.OpenApi;
+import io.javalin.plugin.bundled.RouteOverviewPlugin;
 import io.javalin.websocket.WsConfig;
 import lombok.Getter;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -90,10 +90,25 @@ public class WebServer {
             log.warning("CHANGE THE key IN THE config.yml FILE");
             log.warning("FAILURE TO CHANGE THE KEY MAY RESULT IN SERVER COMPROMISE");
         }
+
+        config.registerPlugin(new RouteOverviewPlugin((configuration -> {
+            configuration.path = "/overview";
+        })));
     }
 
     private void setupAuthentication() {
+        this.javalin.options("/*", ctx -> {
+            ctx.header("Access-Control-Allow-Origin", "*");
+            ctx.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS");
+            ctx.header("Access-Control-Allow-Headers", "*");
+            ctx.header("Access-Control-Allow-Credentials", "true");
+            ctx.status(200);
+        });
+
         this.javalin.beforeMatched(ctx -> {
+            ctx.header("Access-Control-Allow-Origin", "*");
+            ctx.header("Access-Control-Allow-Credentials", "true");
+
             if (!isAuthEnabled) {
                 return;
             }
@@ -129,11 +144,12 @@ public class WebServer {
     }
 
     private void setupOpenApiEndpoints() {
+        // Custom OpenAPI endpoint using our generator
         javalin.get("/openapi.json", ctx -> {
             try {
                 String spec = openApiGenerator.generateOpenApiSpec();
                 ctx.contentType("application/json").result(spec);
-                log.info("[WebServer] Generated OpenAPI spec with " + openApiGenerator.getRouteCount() + " routes");
+                log.info("[WebServer] Generated custom OpenAPI spec with " + openApiGenerator.getRouteCount() + " routes");
             } catch (Exception e) {
                 log.severe("[WebServer] Failed to generate OpenAPI spec: " + e.getMessage());
                 e.printStackTrace();
@@ -151,12 +167,82 @@ public class WebServer {
     }
 
     private void setupSwaggerRoutes() {
+        // Serve Swagger UI manually
+        javalin.get("/swagger", ctx -> {
+            ctx.html(generateSwaggerHtml());
+        });
+
         javalin.get("/swagger.html", ctx -> {
             ctx.redirect("/swagger");
         });
 
-        log.info("[WebServer] Swagger UI available at /swagger");
-        log.info("[WebServer] ReDoc available at /redoc");
+        // Serve ReDoc manually
+        javalin.get("/redoc", ctx -> {
+            ctx.html(generateRedocHtml());
+        });
+
+        log.info("[WebServer] Custom Swagger UI available at /swagger");
+        log.info("[WebServer] Custom ReDoc available at /redoc");
+    }
+
+    private String generateSwaggerHtml() {
+        return """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>CatWalk API Documentation</title>
+                    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui.css" />
+                    <style>
+                        html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+                        *, *:before, *:after { box-sizing: inherit; }
+                        body { margin:0; background: #fafafa; }
+                    </style>
+                </head>
+                <body>
+                    <div id="swagger-ui"></div>
+                    <script src="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui-bundle.js"></script>
+                    <script src="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui-standalone-preset.js"></script>
+                    <script>
+                        window.onload = function() {
+                            const ui = SwaggerUIBundle({
+                                url: '/openapi.json',
+                                dom_id: '#swagger-ui',
+                                deepLinking: true,
+                                presets: [
+                                    SwaggerUIBundle.presets.apis,
+                                    SwaggerUIStandalonePreset
+                                ],
+                                plugins: [
+                                    SwaggerUIBundle.plugins.DownloadUrl
+                                ],
+                                layout: "StandaloneLayout"
+                            });
+                        };
+                    </script>
+                </body>
+                </html>
+                """;
+    }
+
+    private String generateRedocHtml() {
+        return """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>CatWalk API Documentation - ReDoc</title>
+                    <meta charset="utf-8"/>
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
+                    <style>
+                        body { margin: 0; padding: 0; }
+                    </style>
+                </head>
+                <body>
+                    <redoc spec-url='/openapi.json'></redoc>
+                    <script src="https://cdn.jsdelivr.net/npm/redoc@2.0.0/bundles/redoc.standalone.js"></script>
+                </body>
+                </html>
+                """;
     }
 
     /**
@@ -164,6 +250,14 @@ public class WebServer {
      */
     public void registerHandlerInstance(Object handlerInstance, String pluginName) {
         openApiGenerator.registerHandlerInstance(handlerInstance, pluginName);
+    }
+
+    /**
+     * Register a proxy route with OpenAPI documentation
+     */
+    public void registerProxyRoute(HandlerType method, String path, Handler handler, String summary, String description, String[] tags) {
+        addRoute(method, path, handler);
+        openApiGenerator.registerProxyRoute(method, path, summary, description, tags);
     }
 
     private boolean isNoAuthPath(String requestPath) {
@@ -191,17 +285,21 @@ public class WebServer {
         return false;
     }
 
+    //TODO: Setup!!!
     private void configureCors(JavalinConfig config) {
         config.bundledPlugins.enableCors(cors -> cors.addRule(corsConfig -> {
             if (corsOrigin.contains("*")) {
                 log.info("Enabling CORS for *");
-                corsConfig.anyHost();
+                corsConfig.reflectClientOrigin = true;
+//                corsConfig.anyHost();
             } else {
                 corsOrigin.forEach(origin -> {
                     log.info(String.format("Enabling CORS for %s", origin));
                     corsConfig.allowHost(origin);
                 });
             }
+
+            corsConfig.allowCredentials = true;
         }));
     }
 
@@ -253,6 +351,8 @@ public class WebServer {
     public void addRoute(HandlerType httpMethod, String route, Handler handler) {
         if (!(blockedPaths.contains(route) || blockedPaths.contains("/" + route))) {
             this.javalin.addHttpHandler(httpMethod, route, handler);
+
+            openApiGenerator.registerStaticRoute(httpMethod, route, handler);
         } else if (isDebug) {
             log.info(String.format("Not adding Route '%s' because it is blocked in the config.", route));
         }

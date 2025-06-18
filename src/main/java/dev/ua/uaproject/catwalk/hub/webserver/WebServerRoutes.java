@@ -1,14 +1,11 @@
 package dev.ua.uaproject.catwalk.hub.webserver;
 
 import dev.ua.uaproject.catwalk.CatWalkMain;
-import dev.ua.uaproject.catwalk.hub.network.NetworkGateway;
 import io.javalin.http.Handler;
 import io.javalin.websocket.WsConfig;
 
 import java.util.function.Consumer;
 import java.util.logging.Logger;
-
-import static dev.ua.uaproject.catwalk.common.utils.Constants.API_V1;
 
 public final class WebServerRoutes {
 
@@ -42,7 +39,7 @@ public final class WebServerRoutes {
                         <h2>API Documentation</h2>
                         <ul>
                             <li>📊 <a href="/swagger">Swagger UI</a> - Interactive API explorer</li>
-                            <li>📖 <a href="/redoc">ReDoc Documentation</a> - Clean API docs</li>
+                            <li>📖 <a href="/overview">Overview</a> - All endpoints</li>
                             <li>📄 <a href="/openapi.json">OpenAPI Specification</a> - Raw API spec</li>
                         </ul>
                         <h2>API Endpoints</h2>
@@ -78,10 +75,8 @@ public final class WebServerRoutes {
     }
 
     // NEW - Register hub routes with proper OpenAPI
-    public static void addHubRoutes(CatWalkMain main, Logger log, NetworkGateway networkGateway, WebServer webServer) {
-        if (!main.isHubMode()) return;
-
-        PrefixedRouteBuilder pr = new PrefixedRouteBuilder(API_V1, webServer);
+    public static void addHubRoutes(CatWalkMain main, Logger log, WebServer webServer) {
+        log.info("Basic routes registered");
 
         webServer.get("/v1/network/status", ctx -> {
             java.util.Map<String, Object> status = new java.util.HashMap<>();

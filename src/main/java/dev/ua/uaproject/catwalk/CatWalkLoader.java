@@ -26,13 +26,11 @@ public class CatWalkLoader implements PluginLoader {
                 // Core Javalin web framework
                 new Dependency(new DefaultArtifact("io.javalin:javalin-bundle:6.6.0"), null),
 
-                // Javalin OpenAPI plugins
                 new Dependency(new DefaultArtifact("io.javalin.community.openapi:javalin-openapi-plugin:6.6.0"), null),
-                new Dependency(new DefaultArtifact("io.javalin.community.openapi:javalin-swagger-plugin:6.6.0"), null),
-                new Dependency(new DefaultArtifact("io.javalin.community.openapi:javalin-redoc-plugin:6.6.0"), null),
                 new Dependency(new DefaultArtifact("io.javalin.community.ssl:ssl-plugin:6.6.0"), null),
 
                 // Jackson JSON processing
+
                 new Dependency(new DefaultArtifact("com.fasterxml.jackson.core:jackson-core:2.16.1"), null),
                 new Dependency(new DefaultArtifact("com.fasterxml.jackson.core:jackson-databind:2.16.1"), null),
                 new Dependency(new DefaultArtifact("com.fasterxml.jackson.core:jackson-annotations:2.16.1"), null),

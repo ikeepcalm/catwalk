@@ -8,6 +8,7 @@ import dev.ua.uaproject.catwalk.common.database.model.NetworkResponse;
 import dev.ua.uaproject.catwalk.common.database.model.ServerAddon;
 import dev.ua.uaproject.catwalk.hub.webserver.WebServer;
 import io.javalin.http.Context;
+import io.javalin.http.Handler;
 import io.javalin.http.HandlerType;
 import io.javalin.http.HttpStatus;
 import io.javalin.openapi.HttpMethod;
@@ -72,15 +73,27 @@ public class NetworkGateway {
     private void registerProxyRoute(String serverId, String addonName, EndpointDefinition endpoint) {
         String proxyPath = "/v1/servers/" + serverId + endpoint.getPath();
 
-        // Create proxy handler for each HTTP method
         for (HttpMethod method : endpoint.getMethods()) {
             HandlerType handlerType = convertHttpMethod(method);
 
-            webServer.addRoute(handlerType, proxyPath, ctx ->
-                    handleProxyRequest(serverId, endpoint.getPath(), ctx));
+            Handler proxyHandler = ctx -> handleProxyRequest(serverId, endpoint.getPath(), ctx);
 
-            log.debug("[DatabaseHubGateway] Registered proxy route: {} {} → {}:{}",
-                    method, proxyPath, serverId, endpoint.getPath());
+            String summary = endpoint.getSummary() != null ?
+                    endpoint.getSummary() :
+                    "Proxy endpoint for " + endpoint.getPath();
+
+            String description = endpoint.getDescription() != null ?
+                    endpoint.getDescription() :
+                    "Proxied endpoint from server: " + serverId + " (addon: " + addonName + ")";
+
+            String[] tags = endpoint.getTags() != null ?
+                    endpoint.getTags().toArray(new String[0]) :
+                    new String[]{"Proxy", "Server-" + serverId, addonName};
+
+            webServer.registerProxyRoute(handlerType, proxyPath, proxyHandler, summary, description, tags);
+
+            log.debug("[DatabaseHubGateway] Registered proxy route: {} {} → {}:{} ({})",
+                    method, proxyPath, serverId, endpoint.getPath(), addonName);
         }
     }
 

@@ -46,6 +46,7 @@ dependencies {
 
     // Lightweight dependencies to include in JAR
     implementation("com.google.code.gson:gson:2.13.1")
+    implementation("io.javalin.community.openapi:javalin-openapi-plugin:6.6.0")
     compileOnly("org.mariadb.jdbc:mariadb-java-client:3.3.2")
     compileOnly("com.zaxxer:HikariCP:5.1.0")
 
@@ -56,9 +57,6 @@ dependencies {
 
     // Dependencies that will be loaded by our custom loader - use compileOnly
     compileOnly("io.javalin:javalin-bundle:6.6.0")
-    compileOnly("io.javalin.community.openapi:javalin-openapi-plugin:6.6.0")
-    compileOnly("io.javalin.community.openapi:javalin-swagger-plugin:6.6.0")
-    compileOnly("io.javalin.community.openapi:javalin-redoc-plugin:6.6.0")
     compileOnly("io.javalin.community.ssl:ssl-plugin:6.6.0")
 
     compileOnly('org.apache.commons:commons-compress:1.26.0')

@@ -42,7 +42,7 @@ public class BridgeEventHandlerProcessor {
      *
      * @param handlerInstance The instance containing handler methods
      */
-    public void registerHandler(Object handlerInstance, String plugin, @Nullable String docs) {
+    public void registerHandler(Object handlerInstance, String plugin) {
         Class<?> clazz = handlerInstance.getClass();
         WebServer webServer = CatWalkMain.instance.getWebServer();
 
@@ -79,19 +79,6 @@ public class BridgeEventHandlerProcessor {
 
         logger.info("[BridgeProcessor] Successfully registered {} endpoints for plugin '{}'",
                 registeredEndpoints, plugin);
-
-        // Register plugin-specific OpenAPI documentation if provided
-        if (docs != null) {
-            try {
-                webServer.get("/plugins/" + plugin + "/openapi.json", ctx -> {
-                    ctx.contentType("application/json").result(docs);
-                });
-                logger.info("[BridgeProcessor] Registered OpenAPI documentation for plugin: {}", plugin);
-            } catch (Exception e) {
-                logger.error("[BridgeProcessor] Failed to register OpenAPI docs for plugin {}: {}",
-                        plugin, e.getMessage());
-            }
-        }
     }
 
     /**
@@ -124,7 +111,6 @@ public class BridgeEventHandlerProcessor {
         try {
             logger.debug("[BridgeProcessor] Handling request: {} {}", context.method(), context.path());
 
-            // Check authentication if required
             if (requiresAuth) {
                 String authHeader = context.header("Authorization");
                 if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -184,7 +170,6 @@ public class BridgeEventHandlerProcessor {
             handleMethodResult(context, result);
 
             logger.debug("[BridgeProcessor] Successfully handled request: {} {}", context.method(), context.path());
-
         } catch (Exception e) {
             logger.error("[BridgeProcessor] Failed to invoke handler method {}: {}", method.getName(), e.getMessage(), e);
 
