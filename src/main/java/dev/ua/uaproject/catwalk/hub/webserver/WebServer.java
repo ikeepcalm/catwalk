@@ -241,20 +241,20 @@ public class WebServer {
                                     return request;
                                 }
                             });
-                            
+                
                             // Override the authorize function to save tokens
                             setTimeout(function() {
                                 enhanceAuthorizeButton(ui);
                             }, 1000);
                         };
-                        
+                
                         function enhanceAuthorizeButton(ui) {
                             // Find and enhance the authorize button
                             const observer = new MutationObserver(function(mutations) {
                                 const authorizeBtn = document.querySelector('.btn.authorize');
                                 if (authorizeBtn && !authorizeBtn.dataset.enhanced) {
                                     authorizeBtn.dataset.enhanced = 'true';
-                                    
+                
                                     // Override click to save auth data
                                     authorizeBtn.addEventListener('click', function() {
                                         setTimeout(function() {
@@ -262,10 +262,10 @@ public class WebServer {
                                             if (authModal) {
                                                 const authInput = authModal.querySelector('input[type="text"], input[type="password"]');
                                                 const authorizeModalBtn = authModal.querySelector('.btn.authorize');
-                                                
+                
                                                 if (authorizeModalBtn && !authorizeModalBtn.dataset.enhanced) {
                                                     authorizeModalBtn.dataset.enhanced = 'true';
-                                                    
+                
                                                     authorizeModalBtn.addEventListener('click', function() {
                                                         setTimeout(function() {
                                                             if (authInput && authInput.value) {
@@ -274,7 +274,7 @@ public class WebServer {
                                                         }, 100);
                                                     });
                                                 }
-                                                
+                
                                                 // Pre-fill saved token
                                                 const savedToken = localStorage.getItem('swagger-bearer-auth');
                                                 if (savedToken && authInput && !authInput.value) {
@@ -285,7 +285,7 @@ public class WebServer {
                                     });
                                 }
                             });
-                            
+                
                             observer.observe(document.body, { childList: true, subtree: true });
                         }
                     </script>

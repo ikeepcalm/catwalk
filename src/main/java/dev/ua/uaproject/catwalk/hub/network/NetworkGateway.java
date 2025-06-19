@@ -80,15 +80,26 @@ public class NetworkGateway {
 
         for (HttpMethod method : endpoint.getMethods()) {
             String routeKey = method + ":" + proxyPath;
-            
-            // Skip if already registered
+
             if (registeredRoutes.contains(routeKey)) {
                 continue;
             }
 
             HandlerType handlerType = convertHttpMethod(method);
 
-            Handler proxyHandler = ctx -> handleProxyRequest(serverId, endpoint.getPath(), ctx);
+            Handler proxyHandler = ctx -> {
+                String actualRequestPath = ctx.path();
+                String serverPrefix = "/v1/servers/" + serverId;
+
+                if (actualRequestPath.startsWith(serverPrefix)) {
+                    String originalEndpointPath = actualRequestPath.substring(serverPrefix.length());
+                    handleProxyRequest(serverId, originalEndpointPath, ctx);
+                } else {
+                    CatWalkLogger.error("Invalid proxy path format: %s", actualRequestPath);
+                    ctx.status(HttpStatus.BAD_REQUEST)
+                            .json(Map.of("error", "Invalid proxy path format"));
+                }
+            };
 
             String summary = endpoint.getSummary() != null ?
                     endpoint.getSummary() :
@@ -105,7 +116,7 @@ public class NetworkGateway {
             webServer.registerProxyRoute(handlerType, proxyPath, proxyHandler, summary, description, tags);
             registeredRoutes.add(routeKey);
 
-            CatWalkLogger.network("PROXY", String.format("%s %s → %s:%s (%s)", 
+            CatWalkLogger.network("PROXY", String.format("%s %s → %s:%s (%s)",
                     method, proxyPath, serverId, endpoint.getPath(), addonName));
         }
     }
@@ -115,7 +126,7 @@ public class NetworkGateway {
             try {
                 // Use .get() to wait for the future to complete
                 var servers = networkRegistry.getAllServers().get();
-                
+
                 Map<String, Object> status = new HashMap<>();
                 status.put("hubServer", networkRegistry.getCurrentServerId());
                 status.put("timestamp", System.currentTimeMillis());
@@ -135,7 +146,7 @@ public class NetworkGateway {
         webServer.get("/v1/network/servers", ctx -> {
             try {
                 var servers = networkRegistry.getAllServers().get();
-                
+
                 Map<String, Object> response = new HashMap<>();
                 response.put("servers", servers);
                 response.put("totalCount", servers.size());
@@ -151,7 +162,7 @@ public class NetworkGateway {
         webServer.get("/v1/network/addons", ctx -> {
             try {
                 var addonsByServer = networkRegistry.getAllNetworkAddons().get();
-                
+
                 Map<String, Object> response = new HashMap<>();
                 response.put("addonsByServer", addonsByServer);
 
@@ -171,7 +182,7 @@ public class NetworkGateway {
             try {
                 String serverId = ctx.pathParam("serverId");
                 var addons = networkRegistry.getServerAddons(serverId).get();
-                
+
                 Map<String, Object> response = new HashMap<>();
                 response.put("serverId", serverId);
                 response.put("addons", addons);
@@ -193,7 +204,7 @@ public class NetworkGateway {
                 debug.put("timestamp", System.currentTimeMillis());
                 debug.put("databaseConnected", databaseManager != null);
                 debug.put("message", "Network debug endpoint working");
-                
+
                 ctx.json(debug);
             } catch (Exception e) {
                 CatWalkLogger.error("Debug endpoint error: %s", e.getMessage());
@@ -210,91 +221,86 @@ public class NetworkGateway {
         CatWalkLogger.network("PROXY", String.format("%s %s → %s", ctx.method(), originalPath, targetServerId));
 
         try {
-            // Read the request data immediately to avoid parser issues
             String requestBody;
             final Map<String, String> requestHeaders = new HashMap<>(ctx.headerMap());
             final Map<String, String> queryParams = new HashMap<>();
-            
-            // Read body safely
+
             try {
                 requestBody = ctx.body();
             } catch (Exception e) {
                 CatWalkLogger.warn("Failed to read request body: %s", e.getMessage());
                 requestBody = "";
             }
-            
-            // Make body final for lambda access
+
             final String finalRequestBody = requestBody;
-            
-            // Process query parameters
+
             ctx.queryParamMap().forEach((key, values) -> {
                 if (!values.isEmpty()) {
                     queryParams.put(key, String.join(",", values));
                 }
             });
 
-            // Check if target server is online
-            networkRegistry.getAllServers().thenCompose(servers -> {
-                boolean serverOnline = servers.stream()
-                        .anyMatch(s -> s.getServerId().equals(targetServerId) &&
-                                s.getStatus().name().equals("ONLINE"));
+            CompletableFuture<Void> futureResponse = networkRegistry.getAllServers()
+                    .thenCompose(servers -> {
+                        boolean serverOnline = servers.stream()
+                                .anyMatch(s -> s.getServerId().equals(targetServerId) &&
+                                        s.getStatus().name().equals("ONLINE"));
 
-                if (!serverOnline) {
-                    CatWalkLogger.warn("Target server '%s' is not available", targetServerId);
-                    ctx.status(HttpStatus.SERVICE_UNAVAILABLE)
-                            .json(Map.of("error", "Target server '" + targetServerId + "' is not available", 
-                                       "requestId", requestId));
-                    return CompletableFuture.completedFuture(null);
-                }
+                        if (!serverOnline) {
+                            CatWalkLogger.warn("Target server '%s' is not available", targetServerId);
+                            ctx.status(HttpStatus.SERVICE_UNAVAILABLE)
+                                    .json(Map.of("error", "Target server '" + targetServerId + "' is not available",
+                                            "requestId", requestId));
+                            return CompletableFuture.completedFuture(null);
+                        }
 
-                // Create the request with the already-read data
-                NetworkRequest request = NetworkRequest.builder()
-                        .requestId(requestId)
-                        .targetServerId(targetServerId)
-                        .endpointPath(originalPath)
-                        .httpMethod(convertJavalinMethod(ctx.method()))
-                        .headers(requestHeaders)
-                        .queryParams(queryParams)
-                        .body(finalRequestBody)
-                        .priority(0)
-                        .timeoutSeconds(30)
-                        .maxRetries(3)
-                        .status(NetworkRequest.RequestStatus.PENDING)
-                        .build();
+                        NetworkRequest request = NetworkRequest.builder()
+                                .requestId(requestId)
+                                .targetServerId(targetServerId)
+                                .endpointPath(originalPath)
+                                .httpMethod(convertJavalinMethod(ctx.method()))
+                                .headers(requestHeaders)
+                                .queryParams(queryParams)
+                                .body(finalRequestBody)
+                                .priority(0)
+                                .timeoutSeconds(30)
+                                .maxRetries(3)
+                                .status(NetworkRequest.RequestStatus.PENDING)
+                                .build();
 
-                // Store the request in database and wait for response
-                return storeRequest(request).thenCompose(success -> {
-                    if (!success) {
-                        CatWalkLogger.error("Failed to queue request");
-                        ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                                .json(Map.of("error", "Failed to queue request"));
-                        return CompletableFuture.completedFuture(null);
-                    }
+                        return storeRequest(request).thenCompose(success -> {
+                            if (!success) {
+                                CatWalkLogger.error("Failed to queue request");
+                                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                        .json(Map.of("error", "Failed to queue request"));
+                                return CompletableFuture.completedFuture(null);
+                            }
 
-                    // Wait for response
-                    return waitForResponse(requestId, request.getTimeoutSeconds());
-                });
-            }).thenAccept(response -> {
-                if (response != null) {
-                    CatWalkLogger.debug("Received response for request %s", requestId);
-                    handleProxyResponse(ctx, response);
-                } else {
-                    // Timeout or error
-                    CatWalkLogger.warn("No response received for request %s within timeout", requestId);
-                    if (!ctx.res().isCommitted()) {
-                        ctx.status(HttpStatus.GATEWAY_TIMEOUT)
-                                .json(Map.of("error", "Request to target server timed out", "requestId", requestId));
-                    }
-                }
-            }).exceptionally(throwable -> {
-                CatWalkLogger.error("Proxy request failed", throwable);
-                if (!ctx.res().isCommitted()) {
-                    ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                            .json(Map.of("error", "Internal gateway error", "requestId", requestId));
-                }
-                return null;
-            });
-            
+                            return waitForResponse(requestId, request.getTimeoutSeconds());
+                        });
+                    })
+                    .thenAccept(response -> {
+                        if (response != null) {
+                            CatWalkLogger.debug("Received response for request %s", requestId);
+                            handleProxyResponse(ctx, response);
+                        } else {
+                            CatWalkLogger.warn("No response received for request %s within timeout", requestId);
+                            if (!ctx.res().isCommitted()) {
+                                ctx.status(HttpStatus.GATEWAY_TIMEOUT)
+                                        .json(Map.of("error", "Request to target server timed out", "requestId", requestId));
+                            }
+                        }
+                    })
+                    .exceptionally(throwable -> {
+                        CatWalkLogger.error("Proxy request failed", throwable);
+                        if (!ctx.res().isCommitted()) {
+                            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                    .json(Map.of("error", "Internal gateway error", "requestId", requestId));
+                        }
+                        return null;
+                    });
+
+            ctx.future(() -> futureResponse);
         } catch (Exception e) {
             CatWalkLogger.error("Failed to handle proxy request %s", e, requestId);
             if (!ctx.res().isCommitted()) {
@@ -329,10 +335,9 @@ public class NetworkGateway {
     private CompletableFuture<NetworkResponse> waitForResponse(String requestId, int timeoutSeconds) {
         CompletableFuture<NetworkResponse> future = new CompletableFuture<>();
         pendingRequests.put(requestId, future);
-        
+
         CatWalkLogger.debug("Waiting for response %s with timeout %d seconds", requestId, timeoutSeconds);
 
-        // Set timeout
         plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, () -> {
             CompletableFuture<NetworkResponse> removed = pendingRequests.remove(requestId);
             if (removed != null && !removed.isDone()) {
@@ -346,18 +351,23 @@ public class NetworkGateway {
 
     private void handleProxyResponse(Context ctx, NetworkResponse response) {
         try {
-            CatWalkLogger.debug("Handling proxy response: Status %d, Body length: %d, Content-Type: %s", 
-                    response.getStatusCode(), 
+            CatWalkLogger.debug("Handling proxy response: Status %d, Body length: %d, Content-Type: %s",
+                    response.getStatusCode(),
                     response.getBody() != null ? response.getBody().length() : 0,
                     response.getContentType());
 
-            // Set response status and headers
+            // Set response status
             ctx.status(response.getStatusCode());
 
+            // Set response headers (filter out restricted ones)
             if (response.getHeaders() != null) {
                 response.getHeaders().forEach((key, value) -> {
-                    if (!key.equalsIgnoreCase("content-length")) {
-                        ctx.header(key, value);
+                    if (!isResponseHeaderRestricted(key)) {
+                        try {
+                            ctx.header(key, value);
+                        } catch (Exception e) {
+                            CatWalkLogger.debug("Skipped setting response header: %s", key);
+                        }
                     }
                 });
             }
@@ -366,30 +376,61 @@ public class NetworkGateway {
             if (response.getBody() != null && !response.getBody().isEmpty()) {
                 if (response.getContentType() != null && response.getContentType().contains("application/json")) {
                     try {
-                        // Parse and re-serialize to ensure valid JSON
-                        Object parsed = gson.fromJson(response.getBody(), Object.class);
-                        ctx.json(parsed);
+                        // Validate JSON before parsing
+                        String responseBody = response.getBody().trim();
+                        if (responseBody.startsWith("{") || responseBody.startsWith("[")) {
+                            // Parse and re-serialize to ensure valid JSON
+                            Object parsed = gson.fromJson(responseBody, Object.class);
+                            ctx.json(parsed);
+                        } else {
+                            // Not valid JSON format, treat as plain text
+                            CatWalkLogger.debug("Response body doesn't look like JSON, treating as plain text");
+                            ctx.contentType("text/plain").result(responseBody);
+                        }
                     } catch (Exception e) {
-                        // Fallback to plain text if JSON parsing fails
-                        CatWalkLogger.warn("Failed to parse JSON response, using plain text: %s", e.getMessage());
+                        // JSON parsing failed, return as plain text
+                        CatWalkLogger.warn("Failed to parse JSON response: %s. Returning as plain text.", e.getMessage());
+                        CatWalkLogger.debug("Response body that failed to parse: %s", response.getBody());
                         ctx.contentType("text/plain").result(response.getBody());
                     }
                 } else {
+                    // Non-JSON content type
+                    if (response.getContentType() != null) {
+                        ctx.contentType(response.getContentType());
+                    }
                     ctx.result(response.getBody());
                 }
             } else {
-                // Empty response
+                // Empty response body
                 CatWalkLogger.debug("Empty response body, only setting status code");
-                ctx.status(response.getStatusCode());
             }
 
         } catch (Exception e) {
             CatWalkLogger.error("Error handling proxy response", e);
             if (!ctx.res().isCommitted()) {
                 ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .json(Map.of("error", "Error processing response from target server"));
+                        .json(Map.of("error", "Error processing response from target server",
+                                "details", e.getMessage()));
             }
         }
+    }
+
+    /**
+     * Check if a response header should be filtered out
+     */
+    private boolean isResponseHeaderRestricted(String headerName) {
+        if (headerName == null) return true;
+
+        String lowerCaseName = headerName.toLowerCase();
+
+        return switch (lowerCaseName) {
+            case "content-length",
+                 "transfer-encoding",
+                 "connection",
+                 "server",
+                 "date" -> true;
+            default -> false;
+        };
     }
 
     private void startResponsePolling() {
@@ -447,7 +488,7 @@ public class NetworkGateway {
             for (NetworkResponse response : responses) {
                 CompletableFuture<NetworkResponse> future = pendingRequests.remove(response.getRequestId());
                 if (future != null && !future.isDone()) {
-                    CatWalkLogger.debug("Completing request %s with status %d", 
+                    CatWalkLogger.debug("Completing request %s with status %d",
                             response.getRequestId(), response.getStatusCode());
                     future.complete(response);
                 }

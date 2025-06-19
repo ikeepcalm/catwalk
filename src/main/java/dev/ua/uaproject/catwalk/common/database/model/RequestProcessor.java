@@ -150,12 +150,14 @@ public class RequestProcessor {
                 .uri(URI.create(fullUrl))
                 .timeout(Duration.ofSeconds(request.getTimeoutSeconds()));
 
-        // Add headers
         if (request.getHeaders() != null) {
             request.getHeaders().forEach((key, value) -> {
-                if (!key.toLowerCase().equals("host") &&
-                        !key.toLowerCase().equals("content-length")) {
-                    requestBuilder.header(key, value);
+                if (!isRestrictedHeader(key)) {
+                    try {
+                        requestBuilder.header(key, value);
+                    } catch (IllegalArgumentException e) {
+                        CatWalkLogger.debug("Skipped restricted header: %s", key);
+                    }
                 }
             });
         }
@@ -214,6 +216,39 @@ public class RequestProcessor {
                 .body(httpResponse.body())
                 .contentType(contentType)
                 .build();
+    }
+
+    /**
+     * Check if a header name is restricted by the Java HTTP client
+     */
+    private boolean isRestrictedHeader(String headerName) {
+        if (headerName == null) return true;
+
+        String lowerCaseName = headerName.toLowerCase();
+
+        return switch (lowerCaseName) {
+            case "connection",
+                 "content-length",
+                 "date",
+                 "expect",
+                 "from",
+                 "host",
+                 "upgrade",
+                 "via",
+                 "warning",
+                 "authorization", // Handle auth separately if needed
+                 "proxy-authorization",
+                 "proxy-authenticate",
+                 "proxy-connection",
+                 "www-authenticate",
+                 "transfer-encoding",
+                 "trailer",
+                 "te" -> true;
+            default -> // Remove proxy-specific headers
+                    lowerCaseName.startsWith("sec-") ||
+                            lowerCaseName.startsWith("x-forwarded-") || // These are proxy headers
+                            lowerCaseName.equals("x-real-ip");
+        };
     }
 
     private void updateRequestStatus(String requestId, NetworkRequest.RequestStatus status) {
