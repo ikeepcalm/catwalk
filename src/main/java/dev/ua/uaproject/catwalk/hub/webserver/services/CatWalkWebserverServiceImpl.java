@@ -2,6 +2,7 @@ package dev.ua.uaproject.catwalk.hub.webserver.services;
 
 import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.bridge.BridgeEventHandlerProcessor;
+import dev.ua.uaproject.catwalk.common.utils.CatWalkLogger;
 import dev.ua.uaproject.catwalk.hub.network.NetworkRegistry;
 import dev.ua.uaproject.catwalk.hub.webserver.WebServer;
 import io.javalin.Javalin;
@@ -9,7 +10,6 @@ import io.javalin.http.Context;
 import io.javalin.http.Handler;
 import io.javalin.http.HttpStatus;
 import io.javalin.websocket.WsConfig;
-import org.slf4j.LoggerFactory;
 
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -25,7 +25,7 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
         this.plugin = main;
         this.webServer = main.getWebServer();
         this.networkRegistry = main.getNetworkRegistry();
-        this.bridgeProcessor = new BridgeEventHandlerProcessor(LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class));
+        this.bridgeProcessor = new BridgeEventHandlerProcessor();
     }
 
     @Override
@@ -64,11 +64,11 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
 
         if (plugin.isHubMode()) {
             networkRegistry.registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
-            LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class).info("[CatWalkWebserverService] Registered addon '{}' for hub server '{}' (proxy routes only)", pluginName, plugin.getServerId());
+            CatWalkLogger.debug("Registered addon '%s' for hub server '%s' (proxy routes only)", pluginName, plugin.getServerId());
         } else {
             bridgeProcessor.registerHandler(handlerInstance, pluginName);
             networkRegistry.registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
-            LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class).info("[CatWalkWebserverService] Registered addon '{}' for backend server '{}'", pluginName, plugin.getServerId());
+            CatWalkLogger.success("Registered addon '%s' for backend server '%s'", pluginName, plugin.getServerId());
         }
     }
 
@@ -143,7 +143,7 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
                 ctx.status(HttpStatus.OK).json(result);
             }
         } catch (Exception e) {
-            LoggerFactory.getLogger(CatWalkWebserverServiceImpl.class).error("Error processing request: {}", e.getMessage(), e);
+            CatWalkLogger.error("Error processing request: %s", e, e.getMessage());
 
             if (!ctx.res().isCommitted()) {
                 ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(new ErrorResponse("Internal server error", e.getMessage()));

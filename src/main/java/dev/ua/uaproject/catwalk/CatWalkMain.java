@@ -5,6 +5,7 @@ import dev.ua.uaproject.catwalk.common.commands.CatWalkCommand;
 import dev.ua.uaproject.catwalk.common.database.DatabaseConfig;
 import dev.ua.uaproject.catwalk.common.database.DatabaseManager;
 import dev.ua.uaproject.catwalk.common.database.model.RequestProcessor;
+import dev.ua.uaproject.catwalk.common.utils.CatWalkLogger;
 import dev.ua.uaproject.catwalk.common.utils.LagDetector;
 import dev.ua.uaproject.catwalk.hub.api.ApiV1Initializer;
 import dev.ua.uaproject.catwalk.hub.api.stats.StatsListener;
@@ -74,9 +75,10 @@ public class CatWalkMain extends JavaPlugin {
     public void onEnable() {
         try {
             log = getLogger();
+            CatWalkLogger.initialize(this);
             gson = new Gson();
             Class.forName("io.javalin.Javalin");
-            log.info("Custom loader successfully provided dependencies!");
+            CatWalkLogger.success("Custom loader successfully provided dependencies!");
 
             this.statsManager = new StatsManager(this);
             Bukkit.getScheduler().runTaskTimer(this, lagDetector, 100, 1);
@@ -113,9 +115,10 @@ public class CatWalkMain extends JavaPlugin {
             // Register core API routes
             registerCoreApiRoutes();
 
-            log.info("Plugin enabled successfully!");
-            log.info("Mode: " + (isHubMode ? "Hub Gateway" : "Backend Server") + " | Server ID: " + serverId);            log.info("OpenAPI documentation available at /openapi.json");
-            log.info("Swagger UI available at /swagger");
+            CatWalkLogger.success("Plugin enabled successfully!");
+            CatWalkLogger.info("Mode: " + (isHubMode ? "Hub Gateway" : "Backend Server") + " | Server ID: " + serverId);
+            CatWalkLogger.info("OpenAPI documentation available at /openapi.json");
+            CatWalkLogger.info("Swagger UI available at /swagger");
 
         } catch (ClassNotFoundException e) {
             log.severe("Custom loader failed: " + e.getMessage());
@@ -131,8 +134,8 @@ public class CatWalkMain extends JavaPlugin {
         try {
             DatabaseConfig dbConfig = DatabaseConfig.fromBukkitConfig(config);
             this.databaseManager = new DatabaseManager(dbConfig);
-            log.info(String.format("Database connection established to %s:%d/%s",
-                    dbConfig.getHost(), dbConfig.getPort(), dbConfig.getDatabase()));
+            CatWalkLogger.success("Database connection established to %s:%d/%s",
+                    dbConfig.getHost(), dbConfig.getPort(), dbConfig.getDatabase());
 
         } catch (Exception e) {
             log.severe("Failed to initialize database connection: " + e.getMessage());
@@ -144,28 +147,29 @@ public class CatWalkMain extends JavaPlugin {
         this.isHubMode = config.getBoolean("hub.enabled", false);
         this.serverId = config.getString("hub.server-id", "unknown");
 
-        log.info("Mode: " + (isHubMode ? "Hub Gateway" : "Backend Server"));
-        log.info("Server ID: " + serverId);
+        CatWalkLogger.info("Mode: " + (isHubMode ? "Hub Gateway" : "Backend Server"));
+        CatWalkLogger.info("Server ID: " + serverId);
     }
 
     private void initializeHubComponents() {
-        log.info("Initializing Hub Gateway components...");
+        CatWalkLogger.info("Initializing Hub Gateway components...");
         this.hubGateway = new NetworkGateway(databaseManager, networkRegistry, app, this);
+        
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
             hubGateway.registerNetworkRoutes();
-            log.info("Hub Gateway proxy routes registered");
+            CatWalkLogger.success("Hub Gateway proxy routes registered");
         }, 100L); // 5 second delay to allow backend servers to register
 
-        log.info("Hub Gateway initialized successfully");
+        CatWalkLogger.success("Hub Gateway initialized successfully");
     }
 
     private void initializeBackendComponents() {
-        log.info("Initializing Backend Server components...");
+        CatWalkLogger.info("Initializing Backend Server components...");
 
         int localPort = getConfig().getInt("port", 4567);
         this.requestProcessor = new RequestProcessor(databaseManager, serverId, this, localPort);
 
-        log.info("Backend Server initialized successfully");
+        CatWalkLogger.success("Backend Server initialized successfully");
     }
 
     private void registerCoreApiRoutes() {
@@ -178,12 +182,11 @@ public class CatWalkMain extends JavaPlugin {
     }
 
     private void registerStatsApi(ApiV1Initializer api) {
-        log.info("Registering StatsApi endpoints...");
+        CatWalkLogger.debug("Registering StatsApi endpoints...");
 
-        // Register StatsApi directly with WebServer
         app.registerHandlerInstance(api.getStatsApi(), "catwalk-stats");
 
-        log.info("StatsApi endpoints registered");
+        CatWalkLogger.debug("StatsApi endpoints registered");
     }
 
     private void setupWebServer(FileConfiguration bukkitConfig) {
@@ -196,7 +199,7 @@ public class CatWalkMain extends JavaPlugin {
             app.stop();
         }
 
-        log.info("CatWalk reloading...");
+        CatWalkLogger.info("CatWalk reloading...");
         reloadConfig();
         FileConfiguration bukkitConfig = getConfig();
         maxConsoleBufferSize = bukkitConfig.getInt("websocketConsoleBuffer");
@@ -226,7 +229,7 @@ public class CatWalkMain extends JavaPlugin {
         // Re-register APIs
         registerCoreApiRoutes();
 
-        log.info("CatWalk reloaded successfully!");
+        CatWalkLogger.success("CatWalk reloaded successfully!");
     }
 
     @Override

@@ -1,0 +1,110 @@
+# =================================================================
+# Example Backend Server Configuration
+# =================================================================
+
+# Port for the web server
+port: 4568
+
+# Enable debug logging
+debug: true
+
+# Enable authentication for API endpoints
+useKeyAuth: false
+
+# API authentication key (CHANGE THIS!)
+key: 'test_key_123'
+
+# Normalize chat messages
+normalizeMessages: true
+
+# =================================================================
+# HUB GATEWAY SETTINGS
+# =================================================================
+
+hub:
+  # Whether this server acts as a network hub
+  # Set to false for backend servers
+  enabled: false
+
+  # Unique identifier for this server in the network
+  server-id: "backend-01"
+
+# =================================================================
+# DATABASE SETTINGS (REQUIRED)
+# =================================================================
+
+database:
+  # MariaDB/MySQL database connection settings
+  host: "localhost"
+  port: 3306
+  name: "catwalk_network"
+  username: "catwalk"
+  password: "your_secure_password"
+
+  # Connection pool settings
+  pool-size: 10
+  min-idle: 2
+
+  # Connection timeouts (milliseconds)
+  connection-timeout: 30000  # 30 seconds
+  idle-timeout: 600000       # 10 minutes
+  max-lifetime: 1800000      # 30 minutes
+
+# =================================================================
+# NETWORK SETTINGS
+# =================================================================
+
+network:
+  # Request processing settings
+  request-processing:
+    # How often to check for new requests (seconds)
+    poll-interval: 2
+
+    # Default timeout for proxy requests (seconds)
+    default-timeout: 30
+
+    # Maximum number of retries for failed requests
+    max-retries: 3
+
+    # Maximum concurrent requests per server
+    max-concurrent: 10
+
+  # Cache settings for performance
+  cache:
+    # How often to refresh network topology cache (seconds)
+    refresh-interval: 120
+
+    # Enable local caching of server/addon data
+    enabled: true
+
+# =================================================================
+# CORS SETTINGS
+# =================================================================
+
+corsOrigins:
+  - "*"
+
+# =================================================================
+# WEBSOCKET SETTINGS
+# =================================================================
+
+websocketConsoleBuffer: 1000
+
+# =================================================================
+# API DOCUMENTATION
+# =================================================================
+
+disable-swagger: false
+
+# =================================================================
+# SECURITY SETTINGS
+# =================================================================
+
+blocked-paths: [ ]
+
+whitelisted-paths:
+  - "/swagger*"
+  - "/redoc*"
+  - "/openapi.json"
+  - "/v1/network/*"
+  - "/health"

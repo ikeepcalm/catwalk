@@ -131,7 +131,8 @@ public class CustomOpenApiGenerator {
         // Servers section
         JsonArray servers = new JsonArray();
         JsonObject server = new JsonObject();
-        server.addProperty("url", "http://localhost:" + plugin.getConfig().getInt("port", 4567));
+        // server.addProperty("url", "http://localhost:" + plugin.getConfig().getInt("port", 4567));
+        server.addProperty("url", "https://catwalk.uaproject.xyz");
         server.addProperty("description", "CatWalk API Server (" + (plugin.isHubMode() ? "Hub Gateway" : "Backend Server") + ")");
         servers.add(server);
         spec.add("servers", servers);

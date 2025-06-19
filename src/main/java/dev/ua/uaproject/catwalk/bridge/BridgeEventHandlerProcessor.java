@@ -5,12 +5,12 @@ import dev.ua.uaproject.catwalk.CatWalkMain;
 import dev.ua.uaproject.catwalk.bridge.annotations.BridgeEventHandler;
 import dev.ua.uaproject.catwalk.bridge.annotations.BridgePathParam;
 import dev.ua.uaproject.catwalk.common.utils.json.GsonSingleton;
+import dev.ua.uaproject.catwalk.common.utils.CatWalkLogger;
 import dev.ua.uaproject.catwalk.hub.webserver.WebServer;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import io.javalin.openapi.HttpMethod;
 import io.javalin.openapi.OpenApi;
-import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
 import java.lang.reflect.Method;
@@ -28,11 +28,9 @@ import java.util.concurrent.CompletionException;
  */
 public class BridgeEventHandlerProcessor {
 
-    private final Logger logger;
     private final ObjectMapper objectMapper;
 
-    public BridgeEventHandlerProcessor(Logger logger) {
-        this.logger = logger;
+    public BridgeEventHandlerProcessor() {
         this.objectMapper = new ObjectMapper();
     }
 
@@ -46,7 +44,7 @@ public class BridgeEventHandlerProcessor {
         Class<?> clazz = handlerInstance.getClass();
         WebServer webServer = CatWalkMain.instance.getWebServer();
 
-        logger.info("[BridgeProcessor] Registering handler for plugin: {}", plugin);
+        CatWalkLogger.debug("Registering handler for plugin: %s", plugin);
 
         int registeredEndpoints = 0;
 
@@ -57,7 +55,7 @@ public class BridgeEventHandlerProcessor {
             BridgeEventHandler bridgeAnnotation = method.getAnnotation(BridgeEventHandler.class);
             boolean requiresAuth = bridgeAnnotation == null || bridgeAnnotation.requiresAuth();
 
-            logger.info("[BridgeProcessor] Registering endpoint: {} {}",
+            CatWalkLogger.debug("Registering endpoint: %s %s",
                     openApiAnnotation.path(),
                     Arrays.toString(openApiAnnotation.methods()));
 
@@ -71,13 +69,13 @@ public class BridgeEventHandlerProcessor {
                     registerEndpoint(webServer, httpMethod, openApiAnnotation.path(), method, handlerInstance, requiresAuth);
                     registeredEndpoints++;
                 } catch (Exception e) {
-                    logger.error("[BridgeProcessor] Failed to register endpoint {} {}: {}",
-                            httpMethod, openApiAnnotation.path(), e.getMessage());
+                    CatWalkLogger.error("Failed to register endpoint %s %s: %s",
+                            e, httpMethod, openApiAnnotation.path(), e.getMessage());
                 }
             }
         }
 
-        logger.info("[BridgeProcessor] Successfully registered {} endpoints for plugin '{}'",
+        CatWalkLogger.success("Registered %d endpoints for plugin '%s'",
                 registeredEndpoints, plugin);
     }
 
@@ -87,7 +85,7 @@ public class BridgeEventHandlerProcessor {
     private void registerEndpoint(WebServer webServer, HttpMethod httpMethod, String path,
                                   Method method, Object handlerInstance, boolean requiresAuth) {
 
-        logger.debug("[BridgeProcessor] Registering {} {} (auth: {})", httpMethod, path, requiresAuth);
+        CatWalkLogger.debug("Registering %s %s (auth: %s)", httpMethod, path, requiresAuth);
 
         switch (httpMethod) {
             case GET ->
@@ -100,7 +98,7 @@ public class BridgeEventHandlerProcessor {
                     webServer.delete(path, context -> handleRequest(context, method, handlerInstance, getMethodParamType(method), requiresAuth));
             case PATCH ->
                     webServer.addRoute(io.javalin.http.HandlerType.PATCH, path, context -> handleRequest(context, method, handlerInstance, getMethodParamType(method), requiresAuth));
-            default -> logger.warn("[BridgeProcessor] Unsupported HTTP method: {}", httpMethod);
+            default -> CatWalkLogger.warn("Unsupported HTTP method: %s", httpMethod);
         }
     }
 
@@ -109,12 +107,12 @@ public class BridgeEventHandlerProcessor {
      */
     private void handleRequest(Context context, Method method, Object handlerInstance, Class<?> paramType, boolean requiresAuth) {
         try {
-            logger.debug("[BridgeProcessor] Handling request: {} {}", context.method(), context.path());
+            CatWalkLogger.debug("Handling request: %s %s", context.method(), context.path());
 
             if (requiresAuth) {
                 String authHeader = context.header("Authorization");
                 if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                    logger.debug("[BridgeProcessor] Unauthorized request to {}", context.path());
+                    CatWalkLogger.debug("Unauthorized request to %s", context.path());
                     context.status(HttpStatus.UNAUTHORIZED).json(Map.of("error", "Authentication required"));
                     return;
                 }
@@ -169,9 +167,9 @@ public class BridgeEventHandlerProcessor {
             // Handle the result based on its type
             handleMethodResult(context, result);
 
-            logger.debug("[BridgeProcessor] Successfully handled request: {} {}", context.method(), context.path());
+            CatWalkLogger.debug("Successfully handled request: %s %s", context.method(), context.path());
         } catch (Exception e) {
-            logger.error("[BridgeProcessor] Failed to invoke handler method {}: {}", method.getName(), e.getMessage(), e);
+            CatWalkLogger.error("Failed to invoke handler method %s: %s", e, method.getName(), e.getMessage());
 
             if (!context.res().isCommitted()) {
                 context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of(
@@ -200,11 +198,11 @@ public class BridgeEventHandlerProcessor {
                     if (value == null) {
                         context.status(HttpStatus.NO_CONTENT);
                     } else {
-                        context.json(value);
+                        handleBridgeApiResponse(context, value);
                     }
                 }).exceptionally(e -> {
                     Throwable cause = e instanceof CompletionException ? e.getCause() : e;
-                    logger.error("[BridgeProcessor] Async operation failed", cause);
+                    CatWalkLogger.error("Async operation failed", cause);
                     if (!context.res().isCommitted()) {
                         context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", cause.getMessage()));
                     }
@@ -225,9 +223,40 @@ public class BridgeEventHandlerProcessor {
             }
             default -> {
                 if (!context.res().isCommitted()) {
-                    context.json(result);
+                    handleBridgeApiResponse(context, result);
                 }
             }
+        }
+    }
+
+    /**
+     * Handles BridgeApiResponse objects properly by setting the correct HTTP status code.
+     */
+    private void handleBridgeApiResponse(Context context, Object result) {
+        // Check if it's a BridgeApiResponse using reflection to avoid hard dependency
+        if (result.getClass().getSimpleName().equals("BridgeApiResponse")) {
+            try {
+                // Use reflection to get the success field
+                var successField = result.getClass().getField("success");
+                boolean success = (Boolean) successField.get(result);
+                
+                if (!success) {
+                    // For error responses, set HTTP 400 Bad Request
+                    context.status(HttpStatus.BAD_REQUEST);
+                } else {
+                    // For success responses, use HTTP 200 OK (default)
+                    context.status(HttpStatus.OK);
+                }
+                
+                context.json(result);
+            } catch (Exception e) {
+                // If reflection fails, fall back to default behavior
+                CatWalkLogger.error("Failed to handle BridgeApiResponse status: %s", e, e.getMessage());
+                context.json(result);
+            }
+        } else {
+            // Not a BridgeApiResponse, use default handling
+            context.json(result);
         }
     }
 

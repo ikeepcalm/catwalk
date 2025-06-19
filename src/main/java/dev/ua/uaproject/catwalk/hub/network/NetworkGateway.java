@@ -13,7 +13,7 @@ import io.javalin.http.Handler;
 import io.javalin.http.HandlerType;
 import io.javalin.http.HttpStatus;
 import io.javalin.openapi.HttpMethod;
-import lombok.extern.slf4j.Slf4j;
+import dev.ua.uaproject.catwalk.common.utils.CatWalkLogger;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -22,7 +22,6 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
 public class NetworkGateway {
 
     private final DatabaseManager databaseManager;
@@ -32,8 +31,10 @@ public class NetworkGateway {
     private final Gson gson;
 
     private final Map<String, CompletableFuture<NetworkResponse>> pendingRequests = new ConcurrentHashMap<>();
+    private final Set<String> registeredRoutes = ConcurrentHashMap.newKeySet();
 
     private BukkitTask responsePollingTask;
+    private BukkitTask routeRefreshTask;
 
     public NetworkGateway(DatabaseManager databaseManager, NetworkRegistry networkRegistry,
                           WebServer webServer, Plugin plugin) {
@@ -44,8 +45,9 @@ public class NetworkGateway {
         this.gson = new Gson();
 
         startResponsePolling();
+        startRouteRefresh();
 
-        log.info("[DatabaseHubGateway] Hub gateway initialized");
+        CatWalkLogger.success("Hub gateway initialized");
     }
 
     public void registerNetworkRoutes() {
@@ -64,15 +66,26 @@ public class NetworkGateway {
                 }
             }
 
-            log.info("[DatabaseHubGateway] Registered {} proxy routes for {} servers",
-                    totalEndpoints, addonsByServer.size());
+            CatWalkLogger.info("Registered %d proxy routes for %d servers", totalEndpoints, addonsByServer.size());
         });
+    }
+
+    public void refreshNetworkRoutes() {
+        CatWalkLogger.debug("Refreshing network routes");
+        registerNetworkRoutes();
     }
 
     private void registerProxyRoute(String serverId, String addonName, EndpointDefinition endpoint) {
         String proxyPath = "/v1/servers/" + serverId + endpoint.getPath();
 
         for (HttpMethod method : endpoint.getMethods()) {
+            String routeKey = method + ":" + proxyPath;
+            
+            // Skip if already registered
+            if (registeredRoutes.contains(routeKey)) {
+                continue;
+            }
+
             HandlerType handlerType = convertHttpMethod(method);
 
             Handler proxyHandler = ctx -> handleProxyRequest(serverId, endpoint.getPath(), ctx);
@@ -90,9 +103,10 @@ public class NetworkGateway {
                     new String[]{"Proxy", "Server-" + serverId, addonName};
 
             webServer.registerProxyRoute(handlerType, proxyPath, proxyHandler, summary, description, tags);
+            registeredRoutes.add(routeKey);
 
-            log.debug("[DatabaseHubGateway] Registered proxy route: {} {} → {}:{} ({})",
-                    method, proxyPath, serverId, endpoint.getPath(), addonName);
+            CatWalkLogger.network("PROXY", String.format("%s %s → %s:%s (%s)", 
+                    method, proxyPath, serverId, endpoint.getPath(), addonName));
         }
     }
 
@@ -112,8 +126,8 @@ public class NetworkGateway {
 
                 ctx.json(status);
             } catch (Exception e) {
-                log.error("[DatabaseHubGateway] Error in network status endpoint", e);
-                ctx.status(500).json(Map.of("error", "Failed to retrieve network status: " + e.getMessage()));
+                CatWalkLogger.error("Network status endpoint error: %s", e.getMessage());
+                ctx.status(500).json(Map.of("error", "Failed to retrieve network status"));
             }
         });
 
@@ -128,8 +142,8 @@ public class NetworkGateway {
 
                 ctx.json(response);
             } catch (Exception e) {
-                log.error("[DatabaseHubGateway] Error in network servers endpoint", e);
-                ctx.status(500).json(Map.of("error", "Failed to retrieve network servers: " + e.getMessage()));
+                CatWalkLogger.error("Network servers endpoint error: %s", e.getMessage());
+                ctx.status(500).json(Map.of("error", "Failed to retrieve network servers"));
             }
         });
 
@@ -147,8 +161,8 @@ public class NetworkGateway {
 
                 ctx.json(response);
             } catch (Exception e) {
-                log.error("[DatabaseHubGateway] Error in network addons endpoint", e);
-                ctx.status(500).json(Map.of("error", "Failed to retrieve network addons: " + e.getMessage()));
+                CatWalkLogger.error("Network addons endpoint error: %s", e.getMessage());
+                ctx.status(500).json(Map.of("error", "Failed to retrieve network addons"));
             }
         });
 
@@ -165,8 +179,8 @@ public class NetworkGateway {
 
                 ctx.json(response);
             } catch (Exception e) {
-                log.error("[DatabaseHubGateway] Error in server addons endpoint", e);
-                ctx.status(500).json(Map.of("error", "Failed to retrieve server addons: " + e.getMessage()));
+                CatWalkLogger.error("Server addons endpoint error: %s", e.getMessage());
+                ctx.status(500).json(Map.of("error", "Failed to retrieve server addons"));
             }
         });
 
@@ -182,78 +196,112 @@ public class NetworkGateway {
                 
                 ctx.json(debug);
             } catch (Exception e) {
-                log.error("[DatabaseHubGateway] Error in debug endpoint", e);
-                ctx.status(500).json(Map.of("error", "Debug endpoint failed: " + e.getMessage()));
+                CatWalkLogger.error("Debug endpoint error: %s", e.getMessage());
+                ctx.status(500).json(Map.of("error", "Debug endpoint failed"));
             }
         });
 
-        log.info("[DatabaseHubGateway] Registered network management routes");
+        CatWalkLogger.debug("Registered network management routes");
     }
 
     private void handleProxyRequest(String targetServerId, String originalPath, Context ctx) {
         String requestId = UUID.randomUUID().toString();
 
-        log.debug("[DatabaseHubGateway] Proxying request {} to server '{}': {} {}",
-                requestId, targetServerId, ctx.method(), originalPath);
+        CatWalkLogger.network("PROXY", String.format("%s %s → %s", ctx.method(), originalPath, targetServerId));
 
-        // Check if target server is online
-        networkRegistry.getAllServers().thenAccept(servers -> {
-            boolean serverOnline = servers.stream()
-                    .anyMatch(s -> s.getServerId().equals(targetServerId) &&
-                            s.getStatus().name().equals("ONLINE"));
-
-            if (!serverOnline) {
-                ctx.status(HttpStatus.SERVICE_UNAVAILABLE)
-                        .json(Map.of("error", "Target server '" + targetServerId + "' is not available"));
-                return;
+        try {
+            // Read the request data immediately to avoid parser issues
+            String requestBody;
+            final Map<String, String> requestHeaders = new HashMap<>(ctx.headerMap());
+            final Map<String, String> queryParams = new HashMap<>();
+            
+            // Read body safely
+            try {
+                requestBody = ctx.body();
+            } catch (Exception e) {
+                CatWalkLogger.warn("Failed to read request body: %s", e.getMessage());
+                requestBody = "";
             }
+            
+            // Make body final for lambda access
+            final String finalRequestBody = requestBody;
+            
+            // Process query parameters
+            ctx.queryParamMap().forEach((key, values) -> {
+                if (!values.isEmpty()) {
+                    queryParams.put(key, String.join(",", values));
+                }
+            });
 
-            // Create the request
-            NetworkRequest request = NetworkRequest.builder()
-                    .requestId(requestId)
-                    .targetServerId(targetServerId)
-                    .endpointPath(originalPath)
-                    .httpMethod(convertJavalinMethod(ctx.method()))
-                    .headers(new HashMap<>(ctx.headerMap()))
-                    .queryParams(ctx.queryParamMap().entrySet().stream()
-                            .collect(HashMap::new, (map, entry) ->
-                                    map.put(entry.getKey(), String.join(",", entry.getValue())), HashMap::putAll))
-                    .body(ctx.body())
-                    .priority(0)
-                    .timeoutSeconds(30)
-                    .maxRetries(3)
-                    .status(NetworkRequest.RequestStatus.PENDING)
-                    .build();
+            // Check if target server is online
+            networkRegistry.getAllServers().thenCompose(servers -> {
+                boolean serverOnline = servers.stream()
+                        .anyMatch(s -> s.getServerId().equals(targetServerId) &&
+                                s.getStatus().name().equals("ONLINE"));
 
-            // Store the request in database
-            storeRequest(request).thenCompose(success -> {
-                if (!success) {
-                    ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                            .json(Map.of("error", "Failed to queue request"));
+                if (!serverOnline) {
+                    CatWalkLogger.warn("Target server '%s' is not available", targetServerId);
+                    ctx.status(HttpStatus.SERVICE_UNAVAILABLE)
+                            .json(Map.of("error", "Target server '" + targetServerId + "' is not available", 
+                                       "requestId", requestId));
                     return CompletableFuture.completedFuture(null);
                 }
 
-                // Wait for response
-                return waitForResponse(requestId, request.getTimeoutSeconds());
+                // Create the request with the already-read data
+                NetworkRequest request = NetworkRequest.builder()
+                        .requestId(requestId)
+                        .targetServerId(targetServerId)
+                        .endpointPath(originalPath)
+                        .httpMethod(convertJavalinMethod(ctx.method()))
+                        .headers(requestHeaders)
+                        .queryParams(queryParams)
+                        .body(finalRequestBody)
+                        .priority(0)
+                        .timeoutSeconds(30)
+                        .maxRetries(3)
+                        .status(NetworkRequest.RequestStatus.PENDING)
+                        .build();
+
+                // Store the request in database and wait for response
+                return storeRequest(request).thenCompose(success -> {
+                    if (!success) {
+                        CatWalkLogger.error("Failed to queue request");
+                        ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .json(Map.of("error", "Failed to queue request"));
+                        return CompletableFuture.completedFuture(null);
+                    }
+
+                    // Wait for response
+                    return waitForResponse(requestId, request.getTimeoutSeconds());
+                });
             }).thenAccept(response -> {
                 if (response != null) {
+                    CatWalkLogger.debug("Received response for request %s", requestId);
                     handleProxyResponse(ctx, response);
                 } else {
                     // Timeout or error
+                    CatWalkLogger.warn("No response received for request %s within timeout", requestId);
                     if (!ctx.res().isCommitted()) {
                         ctx.status(HttpStatus.GATEWAY_TIMEOUT)
-                                .json(Map.of("error", "Request to target server timed out"));
+                                .json(Map.of("error", "Request to target server timed out", "requestId", requestId));
                     }
                 }
             }).exceptionally(throwable -> {
-                log.error("[DatabaseHubGateway] Proxy request {} failed", requestId, throwable);
+                CatWalkLogger.error("Proxy request failed", throwable);
                 if (!ctx.res().isCommitted()) {
                     ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                            .json(Map.of("error", "Internal gateway error"));
+                            .json(Map.of("error", "Internal gateway error", "requestId", requestId));
                 }
                 return null;
             });
-        });
+            
+        } catch (Exception e) {
+            CatWalkLogger.error("Failed to handle proxy request %s", e, requestId);
+            if (!ctx.res().isCommitted()) {
+                ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .json(Map.of("error", "Failed to process request"));
+            }
+        }
     }
 
     private CompletableFuture<Boolean> storeRequest(NetworkRequest request) {
@@ -281,11 +329,14 @@ public class NetworkGateway {
     private CompletableFuture<NetworkResponse> waitForResponse(String requestId, int timeoutSeconds) {
         CompletableFuture<NetworkResponse> future = new CompletableFuture<>();
         pendingRequests.put(requestId, future);
+        
+        CatWalkLogger.debug("Waiting for response %s with timeout %d seconds", requestId, timeoutSeconds);
 
         // Set timeout
         plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, () -> {
             CompletableFuture<NetworkResponse> removed = pendingRequests.remove(requestId);
             if (removed != null && !removed.isDone()) {
+                CatWalkLogger.warn("Request %s timed out after %d seconds", requestId, timeoutSeconds);
                 removed.completeExceptionally(new RuntimeException("Request timeout"));
             }
         }, timeoutSeconds * 20L); // Convert to ticks
@@ -295,6 +346,11 @@ public class NetworkGateway {
 
     private void handleProxyResponse(Context ctx, NetworkResponse response) {
         try {
+            CatWalkLogger.debug("Handling proxy response: Status %d, Body length: %d, Content-Type: %s", 
+                    response.getStatusCode(), 
+                    response.getBody() != null ? response.getBody().length() : 0,
+                    response.getContentType());
+
             // Set response status and headers
             ctx.status(response.getStatusCode());
 
@@ -307,19 +363,28 @@ public class NetworkGateway {
             }
 
             // Set response body
-            if (response.getBody() != null) {
+            if (response.getBody() != null && !response.getBody().isEmpty()) {
                 if (response.getContentType() != null && response.getContentType().contains("application/json")) {
-                    ctx.json(response.getBody());
+                    try {
+                        // Parse and re-serialize to ensure valid JSON
+                        Object parsed = gson.fromJson(response.getBody(), Object.class);
+                        ctx.json(parsed);
+                    } catch (Exception e) {
+                        // Fallback to plain text if JSON parsing fails
+                        CatWalkLogger.warn("Failed to parse JSON response, using plain text: %s", e.getMessage());
+                        ctx.contentType("text/plain").result(response.getBody());
+                    }
                 } else {
                     ctx.result(response.getBody());
                 }
+            } else {
+                // Empty response
+                CatWalkLogger.debug("Empty response body, only setting status code");
+                ctx.status(response.getStatusCode());
             }
 
-            log.debug("[DatabaseHubGateway] Proxy response completed in {}ms",
-                    response.getProcessedTimeMs());
-
         } catch (Exception e) {
-            log.error("[DatabaseHubGateway] Error handling proxy response", e);
+            CatWalkLogger.error("Error handling proxy response", e);
             if (!ctx.res().isCommitted()) {
                 ctx.status(HttpStatus.INTERNAL_SERVER_ERROR)
                         .json(Map.of("error", "Error processing response from target server"));
@@ -335,7 +400,18 @@ public class NetworkGateway {
             }
         }.runTaskTimerAsynchronously(plugin, 20L, 40L); // Every 2 seconds
 
-        log.info("[DatabaseHubGateway] Started response polling");
+        CatWalkLogger.debug("Started response polling");
+    }
+
+    private void startRouteRefresh() {
+        routeRefreshTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                refreshNetworkRoutes();
+            }
+        }.runTaskTimerAsynchronously(plugin, 200L, 1200L); // Every 60 seconds
+
+        CatWalkLogger.debug("Started periodic route refresh");
     }
 
     private void pollForResponses() {
@@ -363,21 +439,27 @@ public class NetworkGateway {
                 return list;
             });
 
+            if (!responses.isEmpty()) {
+                CatWalkLogger.debug("Found %d responses in database", responses.size());
+            }
+
             // Complete the futures
             for (NetworkResponse response : responses) {
                 CompletableFuture<NetworkResponse> future = pendingRequests.remove(response.getRequestId());
                 if (future != null && !future.isDone()) {
+                    CatWalkLogger.debug("Completing request %s with status %d", 
+                            response.getRequestId(), response.getStatusCode());
                     future.complete(response);
                 }
             }
 
             // Clean up processed responses
             if (!responses.isEmpty()) {
-                cleanupProcessedResponses(responses);
+                // cleanupProcessedResponses(responses);
             }
 
         } catch (Exception e) {
-            log.error("[DatabaseHubGateway] Error polling for responses", e);
+            CatWalkLogger.error("Error polling for responses", e);
         }
     }
 
@@ -404,7 +486,7 @@ public class NetworkGateway {
                 headers = gson.fromJson(headersJson, Map.class);
             }
         } catch (Exception e) {
-            log.warn("[DatabaseHubGateway] Failed to parse response headers");
+            CatWalkLogger.warn("Failed to parse response headers");
         }
 
         return NetworkResponse.builder()
@@ -438,6 +520,9 @@ public class NetworkGateway {
         if (responsePollingTask != null) {
             responsePollingTask.cancel();
         }
+        if (routeRefreshTask != null) {
+            routeRefreshTask.cancel();
+        }
 
         pendingRequests.values().forEach(future -> {
             if (!future.isDone()) {
@@ -445,7 +530,8 @@ public class NetworkGateway {
             }
         });
         pendingRequests.clear();
+        registeredRoutes.clear();
 
-        log.info("[DatabaseHubGateway] Hub gateway shut down");
+        CatWalkLogger.debug("Hub gateway shut down");
     }
 }

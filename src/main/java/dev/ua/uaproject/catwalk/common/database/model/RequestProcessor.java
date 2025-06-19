@@ -2,7 +2,7 @@ package dev.ua.uaproject.catwalk.common.database.model;
 
 import com.google.gson.Gson;
 import dev.ua.uaproject.catwalk.common.database.DatabaseManager;
-import lombok.extern.slf4j.Slf4j;
+import dev.ua.uaproject.catwalk.common.utils.CatWalkLogger;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -16,7 +16,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@Slf4j
 public class RequestProcessor {
 
     private final DatabaseManager databaseManager;
@@ -49,11 +48,12 @@ public class RequestProcessor {
             }
         }.runTaskTimerAsynchronously(plugin, 20L, 40L); // Every 2 seconds
 
-        log.info("[RequestProcessor] Started request processing for server '{}'", serverId);
+        CatWalkLogger.debug("Started request processing for server '%s' - polling every 2 seconds", serverId);
     }
 
     private void processIncomingRequests() {
         try {
+
             // Get pending requests for this server
             String sql = """
                     SELECT * FROM request_queue 
@@ -74,16 +74,23 @@ public class RequestProcessor {
                         return list;
                     });
 
+            if (!requests.isEmpty()) {
+                CatWalkLogger.debug("Found %d pending requests for server %s", requests.size(), serverId);
+            }
+
             for (NetworkRequest request : requests) {
                 processRequest(request);
             }
 
         } catch (Exception e) {
-            log.error("[RequestProcessor] Error processing requests", e);
+            CatWalkLogger.error("Error processing requests", e);
         }
     }
 
     private void processRequest(NetworkRequest request) {
+        CatWalkLogger.debug("Processing request %s for endpoint %s %s on server %s",
+                request.getRequestId(), request.getHttpMethod(), request.getEndpointPath(), serverId);
+
         // Mark request as processing
         updateRequestStatus(request.getRequestId(), NetworkRequest.RequestStatus.PROCESSING);
 
@@ -96,17 +103,17 @@ public class RequestProcessor {
             long endTime = System.currentTimeMillis();
             response.setProcessedTimeMs((int) (endTime - startTime));
 
+            CatWalkLogger.debug("Request %s completed with status %d in %dms",
+                    request.getRequestId(), response.getStatusCode(), response.getProcessedTimeMs());
+
             // Store the response
             storeResponse(response);
 
             // Mark request as completed
             updateRequestStatus(request.getRequestId(), NetworkRequest.RequestStatus.COMPLETED);
 
-            log.debug("[RequestProcessor] Processed request {} in {}ms",
-                    request.getRequestId(), response.getProcessedTimeMs());
-
         } catch (Exception e) {
-            log.error("[RequestProcessor] Failed to process request {}", request.getRequestId(), e);
+            CatWalkLogger.error("Failed to process request %s", e, request.getRequestId());
 
             // Create error response
             NetworkResponse errorResponse = NetworkResponse.builder()
@@ -156,24 +163,43 @@ public class RequestProcessor {
         // Set method and body
         switch (request.getHttpMethod()) {
             case GET -> requestBuilder.GET();
-            case POST -> requestBuilder.POST(HttpRequest.BodyPublishers.ofString(
-                    request.getBody() != null ? request.getBody() : ""));
-            case PUT -> requestBuilder.PUT(HttpRequest.BodyPublishers.ofString(
-                    request.getBody() != null ? request.getBody() : ""));
+            case POST -> {
+                requestBuilder.header("Content-Type", "application/json");
+                requestBuilder.POST(HttpRequest.BodyPublishers.ofString(
+                        request.getBody() != null ? request.getBody() : ""));
+            }
+            case PUT -> {
+                requestBuilder.header("Content-Type", "application/json");
+                requestBuilder.PUT(HttpRequest.BodyPublishers.ofString(
+                        request.getBody() != null ? request.getBody() : ""));
+            }
             case DELETE -> requestBuilder.DELETE();
-            case PATCH -> requestBuilder.method("PATCH", HttpRequest.BodyPublishers.ofString(
-                    request.getBody() != null ? request.getBody() : ""));
+            case PATCH -> {
+                requestBuilder.header("Content-Type", "application/json");
+                requestBuilder.method("PATCH", HttpRequest.BodyPublishers.ofString(
+                        request.getBody() != null ? request.getBody() : ""));
+            }
         }
 
         // Execute request
+        CatWalkLogger.debug("Sending HTTP request: %s %s", request.getHttpMethod(), fullUrl);
+
         HttpResponse<String> httpResponse = httpClient.send(requestBuilder.build(),
                 HttpResponse.BodyHandlers.ofString());
+
+        CatWalkLogger.debug("HTTP response received: %s %s -> Status: %d",
+                request.getHttpMethod(), fullUrl, httpResponse.statusCode());
+
+        if (httpResponse.statusCode() >= 400) {
+            CatWalkLogger.warn("HTTP error response: Status %d, Body: %s",
+                    httpResponse.statusCode(), httpResponse.body());
+        }
 
         // Build response
         Map<String, String> responseHeaders = new HashMap<>();
         httpResponse.headers().map().forEach((key, values) -> {
             if (!values.isEmpty()) {
-                responseHeaders.put(key, values.get(0));
+                responseHeaders.put(key, values.getFirst());
             }
         });
 
@@ -209,15 +235,40 @@ public class RequestProcessor {
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
 
-        databaseManager.executeUpdateAsync(sql, stmt -> {
-            stmt.setString(1, response.getRequestId());
-            stmt.setString(2, response.getServerId());
-            stmt.setInt(3, response.getStatusCode());
-            stmt.setString(4, gson.toJson(response.getHeaders()));
-            stmt.setString(5, response.getBody());
-            stmt.setString(6, response.getContentType());
-            stmt.setObject(7, response.getProcessedTimeMs());
-        });
+        try {
+            // First verify the table exists
+            String tableCheckQuery = "SHOW TABLES LIKE 'response_queue'";
+            String tableExists = databaseManager.executeQuery(tableCheckQuery, null, rs ->
+                    rs.next() ? rs.getString(1) : null);
+
+            if (tableExists == null) {
+                CatWalkLogger.error("response_queue table does not exist!");
+                return;
+            }
+
+            CatWalkLogger.debug("Inserting response for request %s into response_queue table", response.getRequestId());
+
+            int rowsAffected = databaseManager.executeUpdate(sql, stmt -> {
+                stmt.setString(1, response.getRequestId());
+                stmt.setString(2, response.getServerId());
+                stmt.setInt(3, response.getStatusCode());
+                stmt.setString(4, gson.toJson(response.getHeaders()));
+                stmt.setString(5, response.getBody());
+                stmt.setString(6, response.getContentType());
+                stmt.setObject(7, response.getProcessedTimeMs());
+            });
+
+            if (rowsAffected > 0) {
+                CatWalkLogger.debug("Successfully stored response for request %s with status %d",
+                        response.getRequestId(), response.getStatusCode());
+            } else {
+                CatWalkLogger.error("Failed to store response for request %s - no rows affected",
+                        response.getRequestId());
+            }
+        } catch (Exception e) {
+            CatWalkLogger.error("Exception storing response for request %s: %s",
+                    e, response.getRequestId(), e.getMessage());
+        }
     }
 
     private NetworkRequest mapResultSetToRequest(java.sql.ResultSet rs) throws java.sql.SQLException {
@@ -235,7 +286,7 @@ public class RequestProcessor {
                 queryParams = gson.fromJson(queryParamsJson, Map.class);
             }
         } catch (Exception e) {
-            log.warn("[RequestProcessor] Failed to parse request data for {}", rs.getString("request_id"));
+            CatWalkLogger.warn("Failed to parse request data for %s", rs.getString("request_id"));
         }
 
         return NetworkRequest.builder()
@@ -260,6 +311,6 @@ public class RequestProcessor {
         if (processingTask != null) {
             processingTask.cancel();
         }
-        log.info("[RequestProcessor] Shut down request processor");
+        CatWalkLogger.debug("Shut down request processor");
     }
 }
