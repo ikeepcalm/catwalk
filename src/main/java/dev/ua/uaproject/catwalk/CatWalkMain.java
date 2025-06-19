@@ -7,9 +7,6 @@ import dev.ua.uaproject.catwalk.common.database.DatabaseManager;
 import dev.ua.uaproject.catwalk.common.database.model.RequestProcessor;
 import dev.ua.uaproject.catwalk.common.utils.CatWalkLogger;
 import dev.ua.uaproject.catwalk.common.utils.LagDetector;
-import dev.ua.uaproject.catwalk.hub.api.ApiV1Initializer;
-import dev.ua.uaproject.catwalk.hub.api.stats.StatsListener;
-import dev.ua.uaproject.catwalk.hub.api.stats.StatsManager;
 import dev.ua.uaproject.catwalk.hub.network.NetworkGateway;
 import dev.ua.uaproject.catwalk.hub.network.NetworkRegistry;
 import dev.ua.uaproject.catwalk.hub.webserver.WebServer;
@@ -24,10 +21,6 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 public class CatWalkMain extends JavaPlugin {
 
     private static java.util.logging.Logger log;
@@ -40,8 +33,6 @@ public class CatWalkMain extends JavaPlugin {
     @Getter
     private Gson gson;
 
-    @Getter
-    private StatsManager statsManager;
     private final Server server;
     private WebServer app;
 
@@ -80,7 +71,6 @@ public class CatWalkMain extends JavaPlugin {
             Class.forName("io.javalin.Javalin");
             CatWalkLogger.success("Custom loader successfully provided dependencies!");
 
-            this.statsManager = new StatsManager(this);
             Bukkit.getScheduler().runTaskTimer(this, lagDetector, 100, 1);
 
             saveDefaultConfig();
@@ -88,7 +78,6 @@ public class CatWalkMain extends JavaPlugin {
             maxConsoleBufferSize = bukkitConfig.getInt("websocketConsoleBuffer");
 
             new CatWalkCommand(this);
-            server.getPluginManager().registerEvents(new StatsListener(statsManager), this);
 
             // Load configuration
             loadHubConfiguration(bukkitConfig);
@@ -154,7 +143,7 @@ public class CatWalkMain extends JavaPlugin {
     private void initializeHubComponents() {
         CatWalkLogger.info("Initializing Hub Gateway components...");
         this.hubGateway = new NetworkGateway(databaseManager, networkRegistry, app, this);
-        
+
         Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
             hubGateway.registerNetworkRoutes();
             CatWalkLogger.success("Hub Gateway proxy routes registered");
@@ -173,20 +162,10 @@ public class CatWalkMain extends JavaPlugin {
     }
 
     private void registerCoreApiRoutes() {
-        ApiV1Initializer api = new ApiV1Initializer(this, log, lagDetector, statsManager);
         WebServerRoutes.addBasicRoutes(this, log, app);
-        registerStatsApi(api);
-        if (isHubMode){
+        if (isHubMode) {
             hubGateway.registerNetworkManagementRoutes();
         }
-    }
-
-    private void registerStatsApi(ApiV1Initializer api) {
-        CatWalkLogger.debug("Registering StatsApi endpoints...");
-
-        app.registerHandlerInstance(api.getStatsApi(), "catwalk-stats");
-
-        CatWalkLogger.debug("StatsApi endpoints registered");
     }
 
     private void setupWebServer(FileConfiguration bukkitConfig) {
