@@ -48,7 +48,6 @@ public class RequestProcessor {
             }
         }.runTaskTimerAsynchronously(plugin, 20L, 40L); // Every 2 seconds
 
-        CatWalkLogger.debug("Started request processing for server '%s' - polling every 2 seconds", serverId);
     }
 
     private void processIncomingRequests() {
@@ -75,7 +74,6 @@ public class RequestProcessor {
                     });
 
             if (!requests.isEmpty()) {
-                CatWalkLogger.debug("Found %d pending requests for server %s", requests.size(), serverId);
             }
 
             for (NetworkRequest request : requests) {
@@ -88,8 +86,6 @@ public class RequestProcessor {
     }
 
     private void processRequest(NetworkRequest request) {
-        CatWalkLogger.debug("Processing request %s for endpoint %s %s on server %s",
-                request.getRequestId(), request.getHttpMethod(), request.getEndpointPath(), serverId);
 
         // Mark request as processing
         updateRequestStatus(request.getRequestId(), NetworkRequest.RequestStatus.PROCESSING);
@@ -103,8 +99,6 @@ public class RequestProcessor {
             long endTime = System.currentTimeMillis();
             response.setProcessedTimeMs((int) (endTime - startTime));
 
-            CatWalkLogger.debug("Request %s completed with status %d in %dms",
-                    request.getRequestId(), response.getStatusCode(), response.getProcessedTimeMs());
 
             // Store the response
             storeResponse(response);
@@ -156,7 +150,6 @@ public class RequestProcessor {
                     try {
                         requestBuilder.header(key, value);
                     } catch (IllegalArgumentException e) {
-                        CatWalkLogger.debug("Skipped restricted header: %s", key);
                     }
                 }
             });
@@ -184,13 +177,10 @@ public class RequestProcessor {
         }
 
         // Execute request
-        CatWalkLogger.debug("Sending HTTP request: %s %s", request.getHttpMethod(), fullUrl);
 
         HttpResponse<String> httpResponse = httpClient.send(requestBuilder.build(),
                 HttpResponse.BodyHandlers.ofString());
 
-        CatWalkLogger.debug("HTTP response received: %s %s -> Status: %d",
-                request.getHttpMethod(), fullUrl, httpResponse.statusCode());
 
         if (httpResponse.statusCode() >= 400) {
             CatWalkLogger.warn("HTTP error response: Status %d, Body: %s",
@@ -236,7 +226,7 @@ public class RequestProcessor {
                  "upgrade",
                  "via",
                  "warning",
-                 "authorization", // Handle auth separately if needed
+                 // "authorization", // Allow auth headers to be forwarded
                  "proxy-authorization",
                  "proxy-authenticate",
                  "proxy-connection",
@@ -281,7 +271,6 @@ public class RequestProcessor {
                 return;
             }
 
-            CatWalkLogger.debug("Inserting response for request %s into response_queue table", response.getRequestId());
 
             int rowsAffected = databaseManager.executeUpdate(sql, stmt -> {
                 stmt.setString(1, response.getRequestId());
@@ -294,8 +283,6 @@ public class RequestProcessor {
             });
 
             if (rowsAffected > 0) {
-                CatWalkLogger.debug("Successfully stored response for request %s with status %d",
-                        response.getRequestId(), response.getStatusCode());
             } else {
                 CatWalkLogger.error("Failed to store response for request %s - no rows affected",
                         response.getRequestId());
@@ -346,6 +333,5 @@ public class RequestProcessor {
         if (processingTask != null) {
             processingTask.cancel();
         }
-        CatWalkLogger.debug("Shut down request processor");
     }
 }

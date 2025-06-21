@@ -71,7 +71,6 @@ public class NetworkGateway {
     }
 
     public void refreshNetworkRoutes() {
-        CatWalkLogger.debug("Refreshing network routes");
         registerNetworkRoutes();
     }
 
@@ -113,7 +112,7 @@ public class NetworkGateway {
                     endpoint.getTags().toArray(new String[0]) :
                     new String[]{"Proxy", "Server-" + serverId, addonName};
 
-            webServer.registerProxyRoute(handlerType, proxyPath, proxyHandler, summary, description, tags);
+            webServer.registerProxyRoute(handlerType, proxyPath, proxyHandler, summary, description, tags, endpoint);
             registeredRoutes.add(routeKey);
 
             CatWalkLogger.network("PROXY", String.format("%s %s → %s:%s (%s)",
@@ -212,7 +211,6 @@ public class NetworkGateway {
             }
         });
 
-        CatWalkLogger.debug("Registered network management routes");
     }
 
     private void handleProxyRequest(String targetServerId, String originalPath, Context ctx) {
@@ -281,7 +279,6 @@ public class NetworkGateway {
                     })
                     .thenAccept(response -> {
                         if (response != null) {
-                            CatWalkLogger.debug("Received response for request %s", requestId);
                             handleProxyResponse(ctx, response);
                         } else {
                             CatWalkLogger.warn("No response received for request %s within timeout", requestId);
@@ -336,7 +333,6 @@ public class NetworkGateway {
         CompletableFuture<NetworkResponse> future = new CompletableFuture<>();
         pendingRequests.put(requestId, future);
 
-        CatWalkLogger.debug("Waiting for response %s with timeout %d seconds", requestId, timeoutSeconds);
 
         plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, () -> {
             CompletableFuture<NetworkResponse> removed = pendingRequests.remove(requestId);
@@ -351,10 +347,6 @@ public class NetworkGateway {
 
     private void handleProxyResponse(Context ctx, NetworkResponse response) {
         try {
-            CatWalkLogger.debug("Handling proxy response: Status %d, Body length: %d, Content-Type: %s",
-                    response.getStatusCode(),
-                    response.getBody() != null ? response.getBody().length() : 0,
-                    response.getContentType());
 
             // Set response status
             ctx.status(response.getStatusCode());
@@ -366,7 +358,6 @@ public class NetworkGateway {
                         try {
                             ctx.header(key, value);
                         } catch (Exception e) {
-                            CatWalkLogger.debug("Skipped setting response header: %s", key);
                         }
                     }
                 });
@@ -384,13 +375,11 @@ public class NetworkGateway {
                             ctx.json(parsed);
                         } else {
                             // Not valid JSON format, treat as plain text
-                            CatWalkLogger.debug("Response body doesn't look like JSON, treating as plain text");
                             ctx.contentType("text/plain").result(responseBody);
                         }
                     } catch (Exception e) {
                         // JSON parsing failed, return as plain text
                         CatWalkLogger.warn("Failed to parse JSON response: %s. Returning as plain text.", e.getMessage());
-                        CatWalkLogger.debug("Response body that failed to parse: %s", response.getBody());
                         ctx.contentType("text/plain").result(response.getBody());
                     }
                 } else {
@@ -402,7 +391,6 @@ public class NetworkGateway {
                 }
             } else {
                 // Empty response body
-                CatWalkLogger.debug("Empty response body, only setting status code");
             }
 
         } catch (Exception e) {
@@ -441,7 +429,6 @@ public class NetworkGateway {
             }
         }.runTaskTimerAsynchronously(plugin, 20L, 40L); // Every 2 seconds
 
-        CatWalkLogger.debug("Started response polling");
     }
 
     private void startRouteRefresh() {
@@ -452,7 +439,6 @@ public class NetworkGateway {
             }
         }.runTaskTimerAsynchronously(plugin, 200L, 1200L); // Every 60 seconds
 
-        CatWalkLogger.debug("Started periodic route refresh");
     }
 
     private void pollForResponses() {
@@ -481,15 +467,12 @@ public class NetworkGateway {
             });
 
             if (!responses.isEmpty()) {
-                CatWalkLogger.debug("Found %d responses in database", responses.size());
             }
 
             // Complete the futures
             for (NetworkResponse response : responses) {
                 CompletableFuture<NetworkResponse> future = pendingRequests.remove(response.getRequestId());
                 if (future != null && !future.isDone()) {
-                    CatWalkLogger.debug("Completing request %s with status %d",
-                            response.getRequestId(), response.getStatusCode());
                     future.complete(response);
                 }
             }
@@ -573,6 +556,5 @@ public class NetworkGateway {
         pendingRequests.clear();
         registeredRoutes.clear();
 
-        CatWalkLogger.debug("Hub gateway shut down");
     }
 }

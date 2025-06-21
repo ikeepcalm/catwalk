@@ -3,12 +3,17 @@ package dev.ua.uaproject.catwalk.hub.webserver;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.bridge.annotations.ApiProperty;
+import dev.ua.uaproject.catwalk.bridge.annotations.ApiSchema;
+import dev.ua.uaproject.catwalk.common.database.model.EndpointDefinition;
 import io.javalin.http.Handler;
 import io.javalin.http.HandlerType;
 import io.javalin.openapi.HttpMethod;
 import io.javalin.openapi.OpenApi;
 import io.javalin.openapi.OpenApiContent;
 import io.javalin.openapi.OpenApiResponse;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Method;
@@ -49,7 +54,6 @@ public class CustomOpenApiGenerator {
 
         registeredRoutes.put(key, routeInfo);
 
-        log.debug("[CustomOpenApiGenerator] Registered static route: {} {}", method, path);
     }
 
     /**
@@ -83,8 +87,6 @@ public class CustomOpenApiGenerator {
 
                 registeredRoutes.put(key, routeInfo);
 
-                log.debug("[CustomOpenApiGenerator] Registered annotated route: {} {} from plugin '{}'",
-                        handlerType, openApiAnnotation.path(), pluginName);
             }
         }
     }
@@ -92,7 +94,7 @@ public class CustomOpenApiGenerator {
     /**
      * Register a proxy route with custom OpenAPI documentation
      */
-    public void registerProxyRoute(HandlerType method, String path, String summary, String description, String[] tags) {
+    public void registerProxyRoute(HandlerType method, String path, String summary, String description, String[] tags, EndpointDefinition detailedEndpoint) {
         String key = method + ":" + path;
 
         RouteInfo routeInfo = new RouteInfo(method, path, null, null);
@@ -100,10 +102,14 @@ public class CustomOpenApiGenerator {
         routeInfo.setProxySummary(summary);
         routeInfo.setProxyDescription(description);
         routeInfo.setProxyTags(tags);
+        routeInfo.setDetailedEndpoint(detailedEndpoint);
 
         registeredRoutes.put(key, routeInfo);
 
-        log.debug("[CustomOpenApiGenerator] Registered proxy route: {} {} with custom docs", method, path);
+    }
+
+    public void registerProxyRoute(HandlerType method, String path, String summary, String description, String[] tags) {
+        registerProxyRoute(method, path, summary, description, tags, null);
     }
 
     /**
@@ -292,6 +298,64 @@ public class CustomOpenApiGenerator {
                 route.getPath().replaceAll("[^a-zA-Z0-9]", "");
         operation.addProperty("operationId", operationId);
 
+        // Check if we have detailed endpoint information
+        EndpointDefinition detailedEndpoint = route.getDetailedEndpoint();
+
+        if (detailedEndpoint != null) {
+
+            // Add detailed request body if available
+            if (detailedEndpoint.getRequestBody() != null) {
+                JsonObject requestBody = convertMapToJsonObject(detailedEndpoint.getRequestBody());
+                operation.add("requestBody", requestBody);
+            }
+
+            // Add detailed responses if available
+            if (detailedEndpoint.getResponses() != null && !detailedEndpoint.getResponses().isEmpty()) {
+                JsonObject responses = convertMapToJsonObject(detailedEndpoint.getResponses());
+                operation.add("responses", responses);
+            } else {
+                JsonObject responses = new JsonObject();
+                addProxyResponses(responses);
+                operation.add("responses", responses);
+            }
+
+            if (detailedEndpoint.getParameters() != null && !detailedEndpoint.getParameters().isEmpty()) {
+                JsonArray parameters = convertParametersToJsonArray(detailedEndpoint.getParameters());
+                if (!parameters.isEmpty()) {
+                    operation.add("parameters", parameters);
+                }
+            }
+
+        } else {
+            addGenericProxyDocumentation(operation, route);
+        }
+    }
+
+    private JsonObject convertMapToJsonObject(Map<String, Object> map) {
+        return CatWalkMain.instance.getGson().fromJson(CatWalkMain.instance.getGson().toJson(map), JsonObject.class);
+    }
+
+    private JsonArray convertParametersToJsonArray(Map<String, Object> parameters) {
+        JsonArray allParams = new JsonArray();
+
+        if (parameters.containsKey("query")) {
+            List<Map<String, Object>> queryParams = (List<Map<String, Object>>) parameters.get("query");
+            for (Map<String, Object> param : queryParams) {
+                allParams.add(convertMapToJsonObject(param));
+            }
+        }
+
+        if (parameters.containsKey("path")) {
+            List<Map<String, Object>> pathParams = (List<Map<String, Object>>) parameters.get("path");
+            for (Map<String, Object> param : pathParams) {
+                allParams.add(convertMapToJsonObject(param));
+            }
+        }
+
+        return allParams;
+    }
+
+    private void addGenericProxyDocumentation(JsonObject operation, RouteInfo route) {
         // Add path parameters for proxy routes
         if (route.getPath().contains("{")) {
             JsonArray parameters = new JsonArray();
@@ -330,7 +394,223 @@ public class CustomOpenApiGenerator {
     private void generateAnnotatedOperation(JsonObject operation, RouteInfo route) {
         OpenApi annotation = route.getOpenApiAnnotation();
         if (annotation != null) {
-            generateOperationFromAnnotation(operation, annotation, route);
+            // Basic operation info
+            if (!annotation.summary().isEmpty()) {
+                operation.addProperty("summary", annotation.summary());
+            }
+
+            if (!annotation.description().isEmpty()) {
+                operation.addProperty("description", annotation.description());
+            }
+
+            // Tags
+            if (annotation.tags().length > 0) {
+                JsonArray tags = new JsonArray();
+                for (String tag : annotation.tags()) {
+                    tags.add(tag);
+                }
+                operation.add("tags", tags);
+            }
+
+            // Operation ID
+            if (!annotation.operationId().isEmpty()) {
+                operation.addProperty("operationId", annotation.operationId());
+            } else {
+                String operationId = route.getMethod().toString().toLowerCase() +
+                        route.getPath().replaceAll("[^a-zA-Z0-9]", "");
+                operation.addProperty("operationId", operationId);
+            }
+
+            // Parameters (query params, path params)
+            JsonArray parameters = new JsonArray();
+
+            // Add query parameters from annotation
+            for (var queryParam : annotation.queryParams()) {
+                JsonObject param = new JsonObject();
+                param.addProperty("name", queryParam.name());
+                param.addProperty("in", "query");
+                param.addProperty("required", queryParam.required());
+                if (!queryParam.description().isEmpty()) {
+                    param.addProperty("description", queryParam.description());
+                }
+
+                JsonObject schema = new JsonObject();
+                schema.addProperty("type", getOpenApiType(queryParam.type()));
+                param.add("schema", schema);
+
+                parameters.add(param);
+            }
+
+            // Add path parameters from annotation
+            for (var pathParam : annotation.pathParams()) {
+                JsonObject param = new JsonObject();
+                param.addProperty("name", pathParam.name());
+                param.addProperty("in", "path");
+                param.addProperty("required", true);
+                if (!pathParam.description().isEmpty()) {
+                    param.addProperty("description", pathParam.description());
+                }
+
+                JsonObject schema = new JsonObject();
+                schema.addProperty("type", getOpenApiType(pathParam.type()));
+                param.add("schema", schema);
+
+                parameters.add(param);
+            }
+
+            if (!parameters.isEmpty()) {
+                operation.add("parameters", parameters);
+            }
+
+            // Request body with detailed schema generation
+            if (annotation.requestBody() != null && annotation.requestBody().content().length > 0) {
+                JsonObject requestBody = new JsonObject();
+
+                if (!annotation.requestBody().description().isEmpty()) {
+                    requestBody.addProperty("description", annotation.requestBody().description());
+                }
+
+                requestBody.addProperty("required", annotation.requestBody().required());
+
+                JsonObject content = new JsonObject();
+
+                for (OpenApiContent contentItem : annotation.requestBody().content()) {
+                    JsonObject mediaType = new JsonObject();
+
+                    // Get the actual class from the 'from' attribute
+                    Class<?> typeClass = null;
+                    String mimeType = "application/json"; // Default mime type
+
+                    try {
+                        // Try to get the class from the 'from' attribute first
+                        if (contentItem.from() != Object.class) {
+                            typeClass = contentItem.from();
+                        } else if (!contentItem.type().equals("AUTODETECT - Will be replaced later")) {
+                            // Fallback to type() if it's not the auto-detect string
+                            typeClass = Class.forName(contentItem.type());
+                        }
+
+                        // Get mime type - use default if it's the auto-detect string
+                        if (!contentItem.mimeType().equals("AUTODETECT - Will be replaced later")) {
+                            mimeType = contentItem.mimeType();
+                        }
+
+                        if (typeClass != null) {
+                            JsonObject schema = generateDetailedSchema(typeClass);
+                            mediaType.add("schema", schema);
+                        } else {
+                            log.warn("Could not determine class for content item");
+                            JsonObject schema = new JsonObject();
+                            schema.addProperty("type", "object");
+                            mediaType.add("schema", schema);
+                        }
+
+                    } catch (ClassNotFoundException e) {
+                        log.warn("Could not find class for detailed schema generation: {}", contentItem.type());
+                        JsonObject schema = new JsonObject();
+                        schema.addProperty("type", "object");
+                        mediaType.add("schema", schema);
+                    }
+
+                    // Only add example if it's not the null placeholder
+                    if (!contentItem.example().isEmpty() &&
+                            !contentItem.example().equals("-- This string represents a null value and shouldn't be used --")) {
+                        try {
+                            com.google.gson.JsonElement exampleJson = com.google.gson.JsonParser.parseString(contentItem.example());
+                            mediaType.add("example", exampleJson);
+                        } catch (Exception e) {
+                            mediaType.addProperty("example", contentItem.example());
+                        }
+                    }
+
+                    content.add(mimeType, mediaType);
+                }
+
+                requestBody.add("content", content);
+                operation.add("requestBody", requestBody);
+            }
+
+            // Responses with detailed schema generation
+            JsonObject responses = new JsonObject();
+
+            if (annotation.responses().length > 0) {
+                for (OpenApiResponse response : annotation.responses()) {
+                    JsonObject responseObj = new JsonObject();
+                    responseObj.addProperty("description", response.description());
+
+                    if (response.content().length > 0) {
+                        JsonObject content = new JsonObject();
+                        for (OpenApiContent contentItem : response.content()) {
+                            JsonObject mediaType = new JsonObject();
+
+                            // Get the actual class from the 'from' attribute
+                            Class<?> typeClass = null;
+                            String mimeType = "application/json"; // Default mime type
+
+                            try {
+                                // Try to get the class from the 'from' attribute first
+                                if (contentItem.from() != Object.class) {
+                                    typeClass = contentItem.from();
+                                } else if (!contentItem.type().equals("AUTODETECT - Will be replaced later")) {
+                                    // Fallback to type() if it's not the auto-detect string
+                                    typeClass = Class.forName(contentItem.type());
+                                }
+
+                                // Get mime type - use default if it's the auto-detect string
+                                if (!contentItem.mimeType().equals("AUTODETECT - Will be replaced later")) {
+                                    mimeType = contentItem.mimeType();
+                                }
+
+                                if (typeClass != null) {
+                                    JsonObject schema = generateDetailedSchema(typeClass);
+                                    mediaType.add("schema", schema);
+                                } else {
+                                    log.warn("Could not determine response class for content item");
+                                    JsonObject schema = new JsonObject();
+                                    schema.addProperty("type", "object");
+                                    mediaType.add("schema", schema);
+                                }
+
+                            } catch (ClassNotFoundException e) {
+                                log.warn("Could not find response class: {}", contentItem.type());
+                                JsonObject schema = new JsonObject();
+                                schema.addProperty("type", "object");
+                                mediaType.add("schema", schema);
+                            }
+
+                            if (!contentItem.example().isEmpty() &&
+                                    !contentItem.example().equals("-- This string represents a null value and shouldn't be used --")) {
+                                try {
+                                    com.google.gson.JsonElement exampleJson = com.google.gson.JsonParser.parseString(contentItem.example());
+                                    mediaType.add("example", exampleJson);
+                                } catch (Exception e) {
+                                    mediaType.addProperty("example", contentItem.example());
+                                }
+                            }
+
+                            content.add(mimeType, mediaType);
+                        }
+                        responseObj.add("content", content);
+                    }
+
+                    responses.add(response.status(), responseObj);
+                }
+            } else {
+                JsonObject defaultResponse = new JsonObject();
+                defaultResponse.addProperty("description", "Successful operation");
+
+                JsonObject content = new JsonObject();
+                JsonObject jsonContent = new JsonObject();
+                JsonObject schema = new JsonObject();
+                schema.addProperty("type", "object");
+                jsonContent.add("schema", schema);
+                content.add("application/json", jsonContent);
+                defaultResponse.add("content", content);
+
+                responses.add("200", defaultResponse);
+            }
+
+            operation.add("responses", responses);
         }
     }
 
@@ -372,6 +652,195 @@ public class CustomOpenApiGenerator {
         operation.add("responses", responses);
     }
 
+    /**
+     * Enhanced schema generation method that handles @ApiSchema annotations
+     */
+    private JsonObject generateDetailedSchema(Class<?> clazz) {
+        JsonObject schema = new JsonObject();
+
+
+        // Check for @ApiSchema annotation first
+        if (clazz.isAnnotationPresent(ApiSchema.class)) {
+            ApiSchema apiSchema = clazz.getAnnotation(ApiSchema.class);
+
+            schema.addProperty("type", "object");
+
+            if (!apiSchema.description().isEmpty()) {
+                schema.addProperty("description", apiSchema.description());
+            }
+
+            JsonObject properties = new JsonObject();
+            JsonArray required = new JsonArray();
+
+            for (ApiProperty property : apiSchema.properties()) {
+                JsonObject propSchema = new JsonObject();
+                propSchema.addProperty("type", property.type());
+
+                if (!property.description().isEmpty()) {
+                    propSchema.addProperty("description", property.description());
+                }
+
+                if (!property.example().isEmpty()) {
+                    propSchema.addProperty("example", property.example());
+                }
+
+                properties.add(property.name(), propSchema);
+
+                if (property.required()) {
+                    required.add(property.name());
+                }
+            }
+
+            if (properties.size() > 0) {
+                schema.add("properties", properties);
+            }
+
+            if (required.size() > 0) {
+                schema.add("required", required);
+            }
+
+            return schema;
+        }
+
+        // Fallback to reflection-based generation for classes without @ApiSchema
+        return generateSchemaFromReflection(clazz);
+    }
+
+    /**
+     * Fallback schema generation using reflection
+     */
+    private JsonObject generateSchemaFromReflection(Class<?> clazz) {
+        JsonObject schema = new JsonObject();
+
+
+        // Handle primitives and basic types
+        if (isPrimitiveOrWrapper(clazz) || clazz == String.class) {
+            schema.addProperty("type", getOpenApiType(clazz));
+            return schema;
+        }
+
+        if (clazz.isArray()) {
+            schema.addProperty("type", "array");
+            JsonObject items = generateDetailedSchema(clazz.getComponentType());
+            schema.add("items", items);
+            return schema;
+        }
+
+        if (Collection.class.isAssignableFrom(clazz)) {
+            schema.addProperty("type", "array");
+            JsonObject items = new JsonObject();
+            items.addProperty("type", "object");
+            schema.add("items", items);
+            return schema;
+        }
+
+        // For complex objects, use reflection to introspect fields
+        schema.addProperty("type", "object");
+        JsonObject properties = new JsonObject();
+        JsonArray required = new JsonArray();
+
+        try {
+            java.lang.reflect.Field[] fields = clazz.getDeclaredFields();
+
+            for (java.lang.reflect.Field field : fields) {
+                // Skip static, transient, and synthetic fields
+                if (java.lang.reflect.Modifier.isStatic(field.getModifiers()) ||
+                        java.lang.reflect.Modifier.isTransient(field.getModifiers()) ||
+                        field.isSynthetic()) {
+                    continue;
+                }
+
+                // Skip fields marked with @JsonIgnore
+                if (field.isAnnotationPresent(com.fasterxml.jackson.annotation.JsonIgnore.class)) {
+                    continue;
+                }
+
+                String fieldName = getJsonPropertyName(field);
+                JsonObject fieldSchema = new JsonObject();
+                fieldSchema.addProperty("type", getOpenApiType(field.getType()));
+
+                // Add description based on field name
+                String description = generateFieldDescription(field.getName(), field.getType());
+                if (description != null && !description.isEmpty()) {
+                    fieldSchema.addProperty("description", description);
+                }
+
+                properties.add(fieldName, fieldSchema);
+
+                // Mark primitive types as required by default
+                if (field.getType().isPrimitive()) {
+                    required.add(fieldName);
+                }
+            }
+
+
+        } catch (Exception e) {
+            log.warn("Error generating schema for class {}: {}", clazz.getName(), e.getMessage());
+        }
+
+        if (properties.size() > 0) {
+            schema.add("properties", properties);
+        }
+
+        if (required.size() > 0) {
+            schema.add("required", required);
+        }
+
+        return schema;
+    }
+
+    /**
+     * Get the JSON property name for a field, checking for @JsonProperty annotation
+     */
+    private String getJsonPropertyName(java.lang.reflect.Field field) {
+        com.fasterxml.jackson.annotation.JsonProperty jsonProperty =
+                field.getAnnotation(com.fasterxml.jackson.annotation.JsonProperty.class);
+
+        if (jsonProperty != null && !jsonProperty.value().isEmpty()) {
+            return jsonProperty.value();
+        }
+
+        return field.getName();
+    }
+
+    /**
+     * Generate field descriptions based on common naming patterns
+     */
+    private String generateFieldDescription(String fieldName, Class<?> fieldType) {
+        String lowerFieldName = fieldName.toLowerCase().replace("_", "");
+
+        return switch (lowerFieldName) {
+            case "userid" -> "Unique identifier for the user";
+            case "usernickname" -> "Minecraft username/nickname";
+            case "servicename" -> "Name of the service or product";
+            case "discordid" -> "Discord user identifier";
+            case "status" -> "Current status of the item";
+            case "oldnickname" -> "Previous nickname";
+            case "newnickname" -> "New nickname";
+            case "applicationstatus" -> "Status of the application";
+            case "success" -> "Whether the operation was successful";
+            case "message" -> "Human-readable message describing the result";
+            case "data" -> "Response data payload";
+            default -> "The " + fieldName + " field";
+        };
+    }
+
+    /**
+     * Check if a type is primitive or a wrapper class
+     */
+    private boolean isPrimitiveOrWrapper(Class<?> type) {
+        return type.isPrimitive() ||
+                type.equals(Integer.class) ||
+                type.equals(Long.class) ||
+                type.equals(Double.class) ||
+                type.equals(Float.class) ||
+                type.equals(Boolean.class) ||
+                type.equals(Character.class) ||
+                type.equals(Byte.class) ||
+                type.equals(Short.class) ||
+                type.equals(String.class);
+    }
+
     private void addProxyResponses(JsonObject responses) {
         // Success response
         JsonObject okResponse = new JsonObject();
@@ -402,178 +871,6 @@ public class CustomOpenApiGenerator {
         JsonObject timeoutResponse = new JsonObject();
         timeoutResponse.addProperty("description", "Request to target server timed out");
         responses.add("504", timeoutResponse);
-    }
-
-    private void generateOperationFromAnnotation(JsonObject operation, OpenApi annotation, RouteInfo route) {
-        // Basic operation info
-        if (!annotation.summary().isEmpty()) {
-            operation.addProperty("summary", annotation.summary());
-        }
-
-        if (!annotation.description().isEmpty()) {
-            operation.addProperty("description", annotation.description());
-        }
-
-        // Tags
-        if (annotation.tags().length > 0) {
-            JsonArray tags = new JsonArray();
-            for (String tag : annotation.tags()) {
-                tags.add(tag);
-            }
-            operation.add("tags", tags);
-        }
-
-        // Operation ID
-        if (!annotation.operationId().isEmpty()) {
-            operation.addProperty("operationId", annotation.operationId());
-        } else {
-            String operationId = route.getMethod().toString().toLowerCase() +
-                    route.getPath().replaceAll("[^a-zA-Z0-9]", "");
-            operation.addProperty("operationId", operationId);
-        }
-
-        // Parameters (query params, path params)
-        JsonArray parameters = new JsonArray();
-
-        // Add query parameters from annotation
-        for (var queryParam : annotation.queryParams()) {
-            JsonObject param = new JsonObject();
-            param.addProperty("name", queryParam.name());
-            param.addProperty("in", "query");
-            param.addProperty("required", queryParam.required());
-            if (!queryParam.description().isEmpty()) {
-                param.addProperty("description", queryParam.description());
-            }
-
-            JsonObject schema = new JsonObject();
-            schema.addProperty("type", getOpenApiType(queryParam.type()));
-            param.add("schema", schema);
-
-            parameters.add(param);
-        }
-
-        // Add path parameters from annotation
-        for (var pathParam : annotation.pathParams()) {
-            JsonObject param = new JsonObject();
-            param.addProperty("name", pathParam.name());
-            param.addProperty("in", "path");
-            param.addProperty("required", true);
-            if (!pathParam.description().isEmpty()) {
-                param.addProperty("description", pathParam.description());
-            }
-
-            JsonObject schema = new JsonObject();
-            schema.addProperty("type", getOpenApiType(pathParam.type()));
-            param.add("schema", schema);
-
-            parameters.add(param);
-        }
-
-        if (!parameters.isEmpty()) {
-            operation.add("parameters", parameters);
-        }
-
-        // Request body
-        if (annotation.requestBody() != null && annotation.requestBody().content().length > 0) {
-            JsonObject requestBody = new JsonObject();
-            
-            // Add description if provided
-            if (!annotation.requestBody().description().isEmpty()) {
-                requestBody.addProperty("description", annotation.requestBody().description());
-            }
-            
-            // Add required flag
-            requestBody.addProperty("required", annotation.requestBody().required());
-            
-            JsonObject content = new JsonObject();
-
-            for (OpenApiContent contentItem : annotation.requestBody().content()) {
-                JsonObject mediaType = new JsonObject();
-                JsonObject schema = new JsonObject();
-
-                // Handle schema type
-                try {
-                    Class<?> typeClass = Class.forName(contentItem.type());
-                    if (!typeClass.equals(Object.class)) {
-                        schema.addProperty("type", getOpenApiType(typeClass));
-                    } else {
-                        schema.addProperty("type", "object");
-                    }
-                } catch (ClassNotFoundException e) {
-                    schema.addProperty("type", "object");
-                }
-
-                mediaType.add("schema", schema);
-                
-                // Add example if provided
-                if (!contentItem.example().isEmpty()) {
-                    try {
-                        // Parse the example as JSON to ensure it's valid
-                        com.google.gson.JsonElement exampleJson = com.google.gson.JsonParser.parseString(contentItem.example());
-                        mediaType.add("example", exampleJson);
-                    } catch (Exception e) {
-                        // If parsing fails, add as string
-                        mediaType.addProperty("example", contentItem.example());
-                    }
-                }
-                
-                content.add(contentItem.mimeType(), mediaType);
-            }
-
-            requestBody.add("content", content);
-            operation.add("requestBody", requestBody);
-        }
-
-        // Responses
-        JsonObject responses = new JsonObject();
-
-        if (annotation.responses().length > 0) {
-            for (OpenApiResponse response : annotation.responses()) {
-                JsonObject responseObj = new JsonObject();
-                responseObj.addProperty("description", response.description());
-
-                if (response.content().length > 0) {
-                    JsonObject content = new JsonObject();
-                    for (OpenApiContent contentItem : response.content()) {
-                        JsonObject mediaType = new JsonObject();
-                        JsonObject schema = new JsonObject();
-
-                        try {
-                            Class<?> typeClass = Class.forName(contentItem.type());
-                            if (!typeClass.equals(Object.class)) {
-                                schema.addProperty("type", getOpenApiType(typeClass));
-                            } else {
-                                schema.addProperty("type", "object");
-                            }
-                        } catch (ClassNotFoundException e) {
-                            schema.addProperty("type", "object");
-                        }
-
-                        mediaType.add("schema", schema);
-                        content.add(contentItem.mimeType(), mediaType);
-                    }
-                    responseObj.add("content", content);
-                }
-
-                responses.add(response.status(), responseObj);
-            }
-        } else {
-            // Default response
-            JsonObject defaultResponse = new JsonObject();
-            defaultResponse.addProperty("description", "Successful operation");
-
-            JsonObject content = new JsonObject();
-            JsonObject jsonContent = new JsonObject();
-            JsonObject schema = new JsonObject();
-            schema.addProperty("type", "object");
-            jsonContent.add("schema", schema);
-            content.add("application/json", jsonContent);
-            defaultResponse.add("content", content);
-
-            responses.add("200", defaultResponse);
-        }
-
-        operation.add("responses", responses);
     }
 
     // Helper methods for static route documentation
@@ -664,11 +961,15 @@ public class CustomOpenApiGenerator {
     /**
      * Enhanced information about a registered route
      */
+    @Getter
+    @Setter
     public static class RouteInfo {
+        // Getters and setters
         private final HandlerType method;
         private final String path;
         private final Handler handler;
         private final OpenApi openApiAnnotation;
+        private EndpointDefinition detailedEndpoint;
 
         // Common fields
         private RouteType routeType;
@@ -691,103 +992,6 @@ public class CustomOpenApiGenerator {
             this.path = path;
             this.handler = handler;
             this.openApiAnnotation = openApiAnnotation;
-        }
-
-        // Getters and setters
-        public HandlerType getMethod() {
-            return method;
-        }
-
-        public String getPath() {
-            return path;
-        }
-
-        public Handler getHandler() {
-            return handler;
-        }
-
-        public OpenApi getOpenApiAnnotation() {
-            return openApiAnnotation;
-        }
-
-        public RouteType getRouteType() {
-            return routeType;
-        }
-
-        public void setRouteType(RouteType routeType) {
-            this.routeType = routeType;
-        }
-
-        public String getPluginName() {
-            return pluginName;
-        }
-
-        public void setPluginName(String pluginName) {
-            this.pluginName = pluginName;
-        }
-
-        public Object getHandlerInstance() {
-            return handlerInstance;
-        }
-
-        public void setHandlerInstance(Object handlerInstance) {
-            this.handlerInstance = handlerInstance;
-        }
-
-        public Method getHandlerMethod() {
-            return handlerMethod;
-        }
-
-        public void setHandlerMethod(Method handlerMethod) {
-            this.handlerMethod = handlerMethod;
-        }
-
-        public String getProxySummary() {
-            return proxySummary;
-        }
-
-        public void setProxySummary(String proxySummary) {
-            this.proxySummary = proxySummary;
-        }
-
-        public String getProxyDescription() {
-            return proxyDescription;
-        }
-
-        public void setProxyDescription(String proxyDescription) {
-            this.proxyDescription = proxyDescription;
-        }
-
-        public String[] getProxyTags() {
-            return proxyTags;
-        }
-
-        public void setProxyTags(String[] proxyTags) {
-            this.proxyTags = proxyTags;
-        }
-
-        public String getStaticSummary() {
-            return staticSummary;
-        }
-
-        public void setStaticSummary(String staticSummary) {
-            this.staticSummary = staticSummary;
-        }
-
-        public String getStaticDescription() {
-            return staticDescription;
-        }
-
-        public void setStaticDescription(String staticDescription) {
-            this.staticDescription = staticDescription;
-        }
-
-        public String[] getStaticTags() {
-            return staticTags;
-        }
-
-        public void setStaticTags(String[] staticTags) {
-            this.staticTags = staticTags;
         }
     }
 }

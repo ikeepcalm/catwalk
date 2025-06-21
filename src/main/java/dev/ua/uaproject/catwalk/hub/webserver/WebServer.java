@@ -1,6 +1,7 @@
 package dev.ua.uaproject.catwalk.hub.webserver;
 
 import dev.ua.uaproject.catwalk.CatWalkMain;
+import dev.ua.uaproject.catwalk.common.database.model.EndpointDefinition;
 import dev.ua.uaproject.catwalk.common.utils.json.GsonJsonMapper;
 import io.javalin.Javalin;
 import io.javalin.community.ssl.SslPlugin;
@@ -152,7 +153,6 @@ public class WebServer {
                 log.info("[WebServer] Generated custom OpenAPI spec with " + openApiGenerator.getRouteCount() + " routes");
             } catch (Exception e) {
                 log.severe("[WebServer] Failed to generate OpenAPI spec: " + e.getMessage());
-                e.printStackTrace();
                 ctx.status(500).json(java.util.Map.of("error", "Failed to generate OpenAPI specification"));
             }
         });
@@ -376,9 +376,13 @@ public class WebServer {
     /**
      * Register a proxy route with OpenAPI documentation
      */
-    public void registerProxyRoute(HandlerType method, String path, Handler handler, String summary, String description, String[] tags) {
+    public void registerProxyRoute(HandlerType method, String path, Handler handler, String summary, String description, String[] tags, EndpointDefinition detailedEndpoint) {
         addRoute(method, path, handler);
-        openApiGenerator.registerProxyRoute(method, path, summary, description, tags);
+        openApiGenerator.registerProxyRoute(method, path, summary, description, tags, detailedEndpoint);
+    }
+
+    public void registerProxyRoute(HandlerType method, String path, Handler handler, String summary, String description, String[] tags) {
+        registerProxyRoute(method, path, handler, summary, description, tags, null);
     }
 
     private boolean isNoAuthPath(String requestPath) {

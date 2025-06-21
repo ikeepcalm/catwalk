@@ -1,5 +1,7 @@
 package dev.ua.uaproject.catwalk.bridge.source;
 
+import dev.ua.uaproject.catwalk.bridge.annotations.ApiProperty;
+import dev.ua.uaproject.catwalk.bridge.annotations.ApiSchema;
 import io.javalin.http.HttpStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -17,6 +19,31 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@ApiSchema(
+        description = "Standard API response wrapper for consistent response formatting",
+        properties = {
+                @ApiProperty(
+                        name = "success",
+                        type = "boolean",
+                        description = "Whether the operation was successful",
+                        required = true,
+                        example = "true"
+                ),
+                @ApiProperty(
+                        name = "message",
+                        type = "string",
+                        description = "Human-readable message describing the result",
+                        required = false,
+                        example = "Operation completed successfully"
+                ),
+                @ApiProperty(
+                        name = "data",
+                        type = "object",
+                        description = "Response data payload",
+                        required = false
+                )
+        }
+)
 public class BridgeApiResponse<T> {
 
     /**
