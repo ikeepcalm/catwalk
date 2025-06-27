@@ -144,3 +144,5 @@ DELIMITER ;
 
 -- Enable event scheduler
 SET GLOBAL event_scheduler = ON;
+
+ALTER TABLE response_queue MODIFY COLUMN body LONGTEXT;

@@ -142,7 +142,8 @@ public class RequestProcessor {
         // Build HTTP request
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(fullUrl))
-                .timeout(Duration.ofSeconds(request.getTimeoutSeconds()));
+                .timeout(Duration.ofSeconds(request.getTimeoutSeconds()))
+                .header("Accept-Encoding", "identity"); // Disable compression
 
         if (request.getHeaders() != null) {
             request.getHeaders().forEach((key, value) -> {
@@ -190,7 +191,7 @@ public class RequestProcessor {
         // Build response
         Map<String, String> responseHeaders = new HashMap<>();
         httpResponse.headers().map().forEach((key, values) -> {
-            if (!values.isEmpty()) {
+            if (!values.isEmpty() && !key.equalsIgnoreCase("content-encoding")) {
                 responseHeaders.put(key, values.getFirst());
             }
         });
