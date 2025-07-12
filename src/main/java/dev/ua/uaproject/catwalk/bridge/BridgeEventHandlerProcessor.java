@@ -107,8 +107,16 @@ public class BridgeEventHandlerProcessor {
             if (requiresAuth) {
                 String authHeader = context.header("Authorization");
                 if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                    CatWalkLogger.debug("Unauthorized request to %s", context.path());
+                    CatWalkLogger.debug("Unauthorized request to %s - missing Bearer header", context.path());
                     context.status(HttpStatus.UNAUTHORIZED).json(Map.of("error", "Authentication required"));
+                    return;
+                }
+                
+                String token = authHeader.substring(7);
+                String configuredKey = CatWalkMain.instance.getWebServer().getAuthKey();
+                if (!token.equals(configuredKey)) {
+                    CatWalkLogger.debug("Unauthorized request to %s - invalid Bearer token", context.path());
+                    context.status(HttpStatus.UNAUTHORIZED).json(Map.of("error", "Invalid authentication token"));
                     return;
                 }
             }

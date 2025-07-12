@@ -92,17 +92,11 @@ public class CatWalkLogger {
     }
     
     private static void log(Level level, String message, NamedTextColor color) {
-        // Send to console with Adventure formatting
         Component component = Component.text(PREFIX)
                 .color(NamedTextColor.GRAY)
                 .append(Component.text(message).color(color));
         
         Bukkit.getConsoleSender().sendMessage(component);
-        
-        // Also send to plugin logger for file logging
-        if (plugin != null) {
-            plugin.getLogger().log(level, message);
-        }
     }
     
     private static boolean isDebugEnabled() {

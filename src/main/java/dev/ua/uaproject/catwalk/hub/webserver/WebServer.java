@@ -44,6 +44,8 @@ public class WebServer {
     private final boolean sni;
     private final String keyStorePath;
     private final String keyStorePassword;
+
+    @Getter
     private final String authKey;
     private final List<String> corsOrigin;
     private final int securePort;
