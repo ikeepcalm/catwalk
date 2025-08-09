@@ -6,7 +6,6 @@ import dev.ua.ikeepcalm.catwalk.bridge.annotations.BridgeEventHandler;
 import dev.ua.ikeepcalm.catwalk.bridge.annotations.BridgePathParam;
 import dev.ua.ikeepcalm.catwalk.bridge.annotations.BridgeQueryParam;
 import dev.ua.ikeepcalm.catwalk.bridge.annotations.BridgeRequestBody;
-import dev.ua.uaproject.catwalk.bridge.annotations.*;
 import dev.ua.ikeepcalm.catwalk.common.utils.json.GsonSingleton;
 import dev.ua.ikeepcalm.catwalk.common.utils.CatWalkLogger;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServer;
