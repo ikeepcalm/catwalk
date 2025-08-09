@@ -15,15 +15,12 @@ public class CatWalkLoader implements PluginLoader {
 
     @Override
     public void classloader(@NotNull PluginClasspathBuilder classpathBuilder) {
-        // Create Maven library resolver
         MavenLibraryResolver resolver = new MavenLibraryResolver();
 
-        // Add Maven Central repository
         resolver.addRepository(new RemoteRepository.Builder(
-                "central", "default", "https://repo.maven.apache.org/maven2/"
+                "central", "default", "https://repo1.maven.org/maven2/"
         ).build());
 
-        // Define all our dependencies
         List<Dependency> dependencies = List.of(
                 // Core Javalin web framework
                 new Dependency(new DefaultArtifact("io.javalin:javalin-bundle:6.6.0"), null),
