@@ -1,5 +1,5 @@
 name: CatWalk
-main: dev.ua.uaproject.catwalk.CatWalkMain
+main: dev.ua.ikeepcalm.catwalk.CatWalkMain
 loader: dev.ua.uaproject.catwalk.CatWalkLoader
 version: 0.8-SNAPSHOT
 description: CatWalk REST API with Hub Gateway

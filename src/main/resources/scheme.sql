@@ -1,5 +1,3 @@
-USE s436_catwalk;
-
 -- Track active servers in the network
 CREATE TABLE IF NOT EXISTS servers (
                                        server_id VARCHAR(64) PRIMARY KEY,
@@ -25,8 +23,8 @@ CREATE TABLE IF NOT EXISTS server_addons (
     addon_name VARCHAR(128) NOT NULL,
     addon_version VARCHAR(32),
     enabled BOOLEAN DEFAULT TRUE,
-    endpoints JSON NOT NULL, -- Array of endpoint definitions
-    openapi_spec JSON, -- OpenAPI specification for this addon
+    endpoints JSON NOT NULL,
+    openapi_spec JSON,
     registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
@@ -44,11 +42,11 @@ CREATE TABLE IF NOT EXISTS request_queue (
     http_method ENUM('GET', 'POST', 'PUT', 'DELETE', 'PATCH') NOT NULL,
     headers JSON,
     query_params JSON,
-    body TEXT,
+    body LONGTEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     processed_at TIMESTAMP NULL,
     status ENUM('pending', 'processing', 'completed', 'failed', 'timeout') DEFAULT 'pending',
-    priority INT DEFAULT 0, -- Higher priority processed first
+    priority INT DEFAULT 0,
     timeout_seconds INT DEFAULT 30,
     retry_count INT DEFAULT 0,
     max_retries INT DEFAULT 3,
@@ -66,9 +64,9 @@ CREATE TABLE IF NOT EXISTS response_queue (
     server_id VARCHAR(64) NOT NULL,
     status_code INT NOT NULL,
     headers JSON,
-    body TEXT,
+    body LONGTEXT,
     content_type VARCHAR(128) DEFAULT 'application/json',
-    processed_time_ms INT, -- How long it took to process
+    processed_time_ms INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
     INDEX idx_request_id (request_id),
@@ -80,7 +78,7 @@ CREATE TABLE IF NOT EXISTS response_queue (
 CREATE TABLE IF NOT EXISTS network_metrics (
                                                id BIGINT AUTO_INCREMENT PRIMARY KEY,
                                                server_id VARCHAR(64) NOT NULL,
-    metric_type VARCHAR(64) NOT NULL, -- 'player_count', 'tps', 'memory_usage', etc.
+    metric_type VARCHAR(64) NOT NULL,
     metric_value DECIMAL(15,4) NOT NULL,
     metadata JSON,
     recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -96,7 +94,7 @@ CREATE TABLE IF NOT EXISTS addon_configs (
                                              addon_name VARCHAR(128) NOT NULL,
     config_key VARCHAR(256) NOT NULL,
     config_value JSON NOT NULL,
-    server_id VARCHAR(64), -- NULL for global configs
+    server_id VARCHAR(64),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY unique_addon_config (addon_name, config_key, server_id),
@@ -104,11 +102,15 @@ CREATE TABLE IF NOT EXISTS addon_configs (
     INDEX idx_server_id (server_id)
     );
 
+-- Enable event scheduler if supported
+SET @@global.event_scheduler = 1;
+
 -- Cleanup procedures for old data
 DELIMITER //
 
 CREATE EVENT IF NOT EXISTS cleanup_old_requests
 ON SCHEDULE EVERY 1 HOUR
+STARTS CURRENT_TIMESTAMP
 DO
 BEGIN
     -- Remove completed/failed requests older than 24 hours
@@ -132,6 +134,7 @@ DELIMITER //
 
 CREATE EVENT IF NOT EXISTS mark_offline_servers
 ON SCHEDULE EVERY 30 SECOND
+STARTS CURRENT_TIMESTAMP
 DO
 BEGIN
 UPDATE servers
@@ -141,8 +144,3 @@ WHERE status = 'online'
 END //
 
 DELIMITER ;
-
--- Enable event scheduler
-SET GLOBAL event_scheduler = ON;
-
-ALTER TABLE response_queue MODIFY COLUMN body LONGTEXT;
