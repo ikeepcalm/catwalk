@@ -52,8 +52,6 @@ public class NetworkGateway {
 
     public void registerNetworkRoutes() {
         networkRegistry.getAllNetworkAddons().thenAccept(addonsByServer -> {
-            int totalEndpoints = 0;
-
             for (Map.Entry<String, List<ServerAddon>> serverEntry : addonsByServer.entrySet()) {
                 String serverId = serverEntry.getKey();
                 List<ServerAddon> addons = serverEntry.getValue();
@@ -61,12 +59,9 @@ public class NetworkGateway {
                 for (ServerAddon addon : addons) {
                     for (EndpointDefinition endpoint : addon.getEndpoints()) {
                         registerProxyRoute(serverId, addon.getAddonName(), endpoint);
-                        totalEndpoints++;
                     }
                 }
             }
-
-            CatWalkLogger.info("Registered %d proxy routes for %d servers", totalEndpoints, addonsByServer.size());
         });
     }
 
