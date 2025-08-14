@@ -137,8 +137,10 @@ public class CustomOpenApiGenerator {
         // Servers section
         JsonArray servers = new JsonArray();
         JsonObject server = new JsonObject();
-        // server.addProperty("url", "http://localhost:" + plugin.getConfig().getInt("port", 4567));
-        server.addProperty("description", "CatWalk API Server (" + (plugin.isHubMode() ? "Hub Gateway" : "Backend Server") + ")");
+        String serverUrl = plugin.getConfig().getString("server-url", "http://localhost:" + plugin.getConfig().getInt("port", 4567));
+        server.addProperty("url", serverUrl);
+        String mode = plugin.isStandaloneMode() ? "Standalone" : (plugin.isHubMode() ? "Hub Gateway" : "Backend Server");
+        server.addProperty("description", "CatWalk API Server (" + mode + ")");
         servers.add(server);
         spec.add("servers", servers);
 
@@ -633,6 +635,35 @@ public class CustomOpenApiGenerator {
         String operationId = route.getMethod().toString().toLowerCase() +
                              route.getPath().replaceAll("[^a-zA-Z0-9]", "");
         operation.addProperty("operationId", operationId);
+
+        // Add path parameters for static routes if they exist
+        if (route.getPath().contains("{")) {
+            JsonArray parameters = new JsonArray();
+
+            // Extract path parameters
+            String[] pathParts = route.getPath().split("/");
+            for (String part : pathParts) {
+                if (part.startsWith("{") && part.endsWith("}")) {
+                    String paramName = part.substring(1, part.length() - 1);
+
+                    JsonObject param = new JsonObject();
+                    param.addProperty("name", paramName);
+                    param.addProperty("in", "path");
+                    param.addProperty("required", true);
+                    param.addProperty("description", "Path parameter: " + paramName);
+
+                    JsonObject schema = new JsonObject();
+                    schema.addProperty("type", "string");
+                    param.add("schema", schema);
+
+                    parameters.add(param);
+                }
+            }
+
+            if (!parameters.isEmpty()) {
+                operation.add("parameters", parameters);
+            }
+        }
 
         // Basic responses for static routes
         JsonObject responses = new JsonObject();

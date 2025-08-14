@@ -40,6 +40,9 @@ public class CatWalkMain extends JavaPlugin {
     private boolean isHubMode = false;
 
     @Getter
+    private boolean isStandaloneMode = false;
+
+    @Getter
     private String serverId;
 
     // NEW - Database-based components
@@ -82,11 +85,15 @@ public class CatWalkMain extends JavaPlugin {
             // Load configuration
             loadHubConfiguration(bukkitConfig);
 
-            // Initialize database connection
-            initializeDatabase(bukkitConfig);
-
-            // Initialize network registry
-            this.networkRegistry = new NetworkRegistry(databaseManager, serverId, isHubMode);
+            // Initialize database connection (skip in standalone mode)
+            if (!isStandaloneMode) {
+                initializeDatabase(bukkitConfig);
+                
+                // Initialize network registry
+                this.networkRegistry = new NetworkRegistry(databaseManager, serverId, isHubMode);
+            } else {
+                CatWalkLogger.info("Skipping database initialization in standalone mode");
+            }
 
             // IMPORTANT: Register webserver service FIRST
             CatWalkWebserverService webserverService = new CatWalkWebserverServiceImpl(this);
@@ -95,7 +102,9 @@ public class CatWalkMain extends JavaPlugin {
             setupWebServer(bukkitConfig);
 
             // Initialize based on server mode
-            if (isHubMode) {
+            if (isStandaloneMode) {
+                initializeStandaloneComponents();
+            } else if (isHubMode) {
                 initializeHubComponents();
             } else {
                 initializeBackendComponents();
@@ -105,7 +114,8 @@ public class CatWalkMain extends JavaPlugin {
             registerCoreApiRoutes();
 
             CatWalkLogger.success("Plugin enabled successfully!");
-            CatWalkLogger.info("Mode: " + (isHubMode ? "Hub Gateway" : "Backend Server") + " | Server ID: " + serverId);
+            String mode = isStandaloneMode ? "Standalone" : (isHubMode ? "Hub Gateway" : "Backend Server");
+            CatWalkLogger.info("Mode: " + mode + " | Server ID: " + serverId);
             CatWalkLogger.info("OpenAPI documentation available at /openapi.json");
             CatWalkLogger.info("Swagger UI available at /swagger");
 
@@ -133,10 +143,20 @@ public class CatWalkMain extends JavaPlugin {
     }
 
     private void loadHubConfiguration(FileConfiguration config) {
-        this.isHubMode = config.getBoolean("hub.enabled", false);
+        Object hubEnabled = config.get("hub.enabled", false);
+        
+        if (hubEnabled instanceof String && "standalone".equalsIgnoreCase((String) hubEnabled)) {
+            this.isStandaloneMode = true;
+            this.isHubMode = false;
+        } else {
+            this.isHubMode = config.getBoolean("hub.enabled", false);
+            this.isStandaloneMode = false;
+        }
+        
         this.serverId = config.getString("hub.server-id", "unknown");
 
-        CatWalkLogger.info("Mode: " + (isHubMode ? "Hub Gateway" : "Backend Server"));
+        String mode = isStandaloneMode ? "Standalone" : (isHubMode ? "Hub Gateway" : "Backend Server");
+        CatWalkLogger.info("Mode: " + mode);
         CatWalkLogger.info("Server ID: " + serverId);
     }
 
@@ -161,9 +181,20 @@ public class CatWalkMain extends JavaPlugin {
         CatWalkLogger.success("Backend Server initialized successfully");
     }
 
+    private void initializeStandaloneComponents() {
+        CatWalkLogger.info("Initializing Standalone Server components...");
+        
+        // In standalone mode, we don't need database-based components
+        // All addon endpoints are registered directly on the local webserver
+        // No request processing or network gateway needed
+        
+        CatWalkLogger.success("Standalone Server initialized successfully");
+        CatWalkLogger.info("All addon endpoints will be registered directly on this server");
+    }
+
     private void registerCoreApiRoutes() {
         WebServerRoutes.addBasicRoutes(this, log, app);
-        if (isHubMode) {
+        if (isHubMode && !isStandaloneMode) {
             hubGateway.registerNetworkManagementRoutes();
         }
     }
@@ -199,7 +230,9 @@ public class CatWalkMain extends JavaPlugin {
         setupWebServer(bukkitConfig);
 
         // Reinitialize components based on mode
-        if (isHubMode) {
+        if (isStandaloneMode) {
+            initializeStandaloneComponents();
+        } else if (isHubMode) {
             initializeHubComponents();
         } else {
             initializeBackendComponents();

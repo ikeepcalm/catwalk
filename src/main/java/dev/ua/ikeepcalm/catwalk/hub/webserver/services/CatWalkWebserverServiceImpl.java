@@ -62,12 +62,20 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
     public void registerHandlers(Object handlerInstance) {
         String pluginName = extractPluginName(handlerInstance);
 
-        if (plugin.isHubMode()) {
-            networkRegistry.registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
+        if (plugin.isStandaloneMode()) {
+            // In standalone mode, register handlers directly without database interaction
+            bridgeProcessor.registerHandler(handlerInstance, pluginName);
+            CatWalkLogger.success("Registered addon '%s' for standalone server '%s'", pluginName, plugin.getServerId());
+        } else if (plugin.isHubMode()) {
+            if (networkRegistry != null) {
+                networkRegistry.registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
+            }
             CatWalkLogger.debug("Registered addon '%s' for hub server '%s' (proxy routes only)", pluginName, plugin.getServerId());
         } else {
             bridgeProcessor.registerHandler(handlerInstance, pluginName);
-            networkRegistry.registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
+            if (networkRegistry != null) {
+                networkRegistry.registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
+            }
             CatWalkLogger.success("Registered addon '%s' for backend server '%s'", pluginName, plugin.getServerId());
         }
     }

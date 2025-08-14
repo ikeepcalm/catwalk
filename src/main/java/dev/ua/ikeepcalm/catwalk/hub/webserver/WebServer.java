@@ -48,6 +48,8 @@ public class WebServer {
     @Getter
     private final String authKey;
     private final List<String> corsOrigin;
+    @Getter
+    private final String serverUrl;
     private final int securePort;
     private final CatWalkMain main;
 
@@ -68,6 +70,7 @@ public class WebServer {
         this.keyStorePassword = bukkitConfig.getString("tls.keystorePassword", "");
         this.authKey = bukkitConfig.getString("key", "change_me");
         this.corsOrigin = bukkitConfig.getStringList("corsOrigins");
+        this.serverUrl = bukkitConfig.getString("server-url", "http://localhost:" + bukkitConfig.getInt("port", 4567));
         this.securePort = bukkitConfig.getInt("port", 4567);
         this.openApiGenerator = new CustomOpenApiGenerator(main);
         this.javalin = Javalin.create(this::configureJavalin);
@@ -100,17 +103,7 @@ public class WebServer {
     }
 
     private void setupAuthentication() {
-        this.javalin.options("/*", ctx -> {
-            ctx.header("Access-Control-Allow-Origin", "*");
-            ctx.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS");
-            ctx.header("Access-Control-Allow-Headers", "*");
-            ctx.header("Access-Control-Allow-Credentials", "true");
-            ctx.status(200);
-        });
-
         this.javalin.beforeMatched(ctx -> {
-            ctx.header("Access-Control-Allow-Origin", "*");
-            ctx.header("Access-Control-Allow-Credentials", "true");
 
             if (!isAuthEnabled) {
                 return;
@@ -412,20 +405,17 @@ public class WebServer {
         return false;
     }
 
-    //TODO: Setup!!!
     private void configureCors(JavalinConfig config) {
         config.bundledPlugins.enableCors(cors -> cors.addRule(corsConfig -> {
             if (corsOrigin.contains("*")) {
-                log.info("Enabling CORS for *");
+                log.info("Enabling CORS for all origins (*)");
                 corsConfig.reflectClientOrigin = true;
-//                corsConfig.anyHost();
             } else {
                 corsOrigin.forEach(origin -> {
                     log.info(String.format("Enabling CORS for %s", origin));
                     corsConfig.allowHost(origin);
                 });
             }
-
             corsConfig.allowCredentials = true;
         }));
     }

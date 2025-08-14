@@ -9,6 +9,11 @@
 # Port for the web server
 port: 4567
 
+# Server URL for OpenAPI specification and CORS
+# Use the actual domain/URL where your server is accessible
+# Examples: "http://localhost:4567", "https://catwalk.uaproject.net"
+server-url: "http://localhost:4567"
+
 # Enable debug logging
 debug: false
 
@@ -26,16 +31,19 @@ normalizeMessages: true
 # =================================================================
 
 hub:
-  # Whether this server acts as a network hub
-  # Set to true ONLY on your lobby server
+  # Server mode configuration:
+  # - true: Hub Gateway mode (routes requests through database to other servers)
+  # - false: Backend Server mode (processes requests from database)
+  # - "standalone": Standalone mode (no database, direct local routing)
   enabled: false
 
   # Unique identifier for this server in the network
   # Examples: "lobby", "survival", "creative", "hub", "beta", "vanilla", "heavy"
+  # In standalone mode, this is used for identification only
   server-id: "unknown"
 
 # =================================================================
-# DATABASE SETTINGS (REQUIRED)
+# DATABASE SETTINGS (REQUIRED for hub and backend modes)
 # =================================================================
 
 database:
