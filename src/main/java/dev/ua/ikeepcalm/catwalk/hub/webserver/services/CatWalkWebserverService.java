@@ -109,4 +109,12 @@ public interface CatWalkWebserverService {
      * @param <T> The type of the response
      */
     <T> void deleteWithResponse(String path, Function<Context, T> responseFunction);
+
+    /**
+     * Get the current Bearer authorization key used by the webserver.
+     * This can be used by addons to make authenticated requests to other CatWalk instances.
+     *
+     * @return the current Bearer authorization key
+     */
+    String getAuthKey();
 }

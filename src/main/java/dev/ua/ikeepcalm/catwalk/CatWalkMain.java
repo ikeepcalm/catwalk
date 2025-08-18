@@ -132,12 +132,24 @@ public class CatWalkMain extends JavaPlugin {
     private void initializeDatabase(FileConfiguration config) {
         try {
             DatabaseConfig dbConfig = DatabaseConfig.fromBukkitConfig(config);
-            this.databaseManager = new DatabaseManager(dbConfig);
-            CatWalkLogger.success("Database connection established to %s:%d/%s",
+            CatWalkLogger.info("Initializing database connection to %s:%d/%s",
                     dbConfig.getHost(), dbConfig.getPort(), dbConfig.getDatabase());
+            
+            this.databaseManager = new DatabaseManager(dbConfig);
+            CatWalkLogger.success("Database connection established and schema initialized successfully");
 
+        } catch (DatabaseManager.DatabaseException e) {
+            CatWalkLogger.error("Database initialization failed with SQL error [%s]: %s", 
+                    e.getSqlState(), e.getMessage());
+            if (e.isRecoverable()) {
+                CatWalkLogger.warn("This appears to be a recoverable error. Check your database connection and try restarting.");
+            } else {
+                CatWalkLogger.error("This appears to be a critical database configuration error. Check your database settings.");
+            }
+            throw new RuntimeException("Database initialization failed", e);
         } catch (Exception e) {
-            log.severe("Failed to initialize database connection: " + e.getMessage());
+            CatWalkLogger.error("Failed to initialize database connection: %s", e.getMessage());
+            CatWalkLogger.error("Please check your database configuration in config.yml");
             throw new RuntimeException("Database initialization failed", e);
         }
     }

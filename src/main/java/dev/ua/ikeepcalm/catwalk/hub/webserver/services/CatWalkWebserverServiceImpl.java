@@ -159,6 +159,11 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
         }
     }
 
+    @Override
+    public String getAuthKey() {
+        return webServer.getAuthKey();
+    }
+
     private record ErrorResponse(String error, String message) {
 
     }

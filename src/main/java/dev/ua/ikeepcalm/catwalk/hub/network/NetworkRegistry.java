@@ -59,8 +59,8 @@ public class NetworkRegistry {
     public void registerServer(NetworkServer server) {
         String sql = """
                 INSERT INTO servers (server_id, server_name, server_type, host, port, 
-                                   online_players, max_players, status, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   online_players, max_players, status, metadata, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                 ON DUPLICATE KEY UPDATE
                     server_name = VALUES(server_name),
                     server_type = VALUES(server_type),
@@ -116,8 +116,8 @@ public class NetworkRegistry {
     // Addon management
     public void registerAddon(String serverId, ServerAddon addon) {
         String sql = """
-                INSERT INTO server_addons (server_id, addon_name, addon_version, enabled, endpoints, openapi_spec)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO server_addons (server_id, addon_name, addon_version, enabled, endpoints, openapi_spec, registered_at)
+                VALUES (?, ?, ?, ?, ?, ?, NOW())
                 ON DUPLICATE KEY UPDATE
                     addon_version = VALUES(addon_version),
                     enabled = VALUES(enabled),

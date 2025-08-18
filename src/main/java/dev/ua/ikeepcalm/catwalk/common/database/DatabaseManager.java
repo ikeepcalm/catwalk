@@ -24,6 +24,7 @@ public class DatabaseManager {
         this.asyncExecutor = Executors.newFixedThreadPool(config.getPoolSize());
         initializeDataSource(config);
         validateConnection();
+        initializeSchema();
     }
 
     private void initializeDataSource(DatabaseConfig config) {
@@ -76,6 +77,21 @@ public class DatabaseManager {
         }
     }
 
+    private void initializeSchema() {
+        try {
+            SchemaInitializer schemaInitializer = new SchemaInitializer(this);
+            if (!schemaInitializer.isSchemaInitialized()) {
+                log.info("[DatabaseManager] Database schema not found, initializing...");
+                schemaInitializer.initializeSchema();
+            } else {
+                log.info("[DatabaseManager] Database schema already initialized");
+            }
+        } catch (Exception e) {
+            log.error("[DatabaseManager] Failed to initialize database schema: {}", e.getMessage(), e);
+            throw new RuntimeException("Database schema initialization failed", e);
+        }
+    }
+
     public Connection getConnection() throws SQLException {
         return dataSource.getConnection();
     }
@@ -93,8 +109,9 @@ public class DatabaseManager {
                 return mapper.map(rs);
             }
         } catch (SQLException e) {
-            log.error("[DatabaseManager] Query execution failed: {}", sql, e);
-            throw new DatabaseException("Query execution failed", e);
+            String errorDetails = formatSQLError(e, sql);
+            log.error("[DatabaseManager] Query execution failed: {}", errorDetails, e);
+            throw new DatabaseException("Query execution failed: " + errorDetails, e);
         }
     }
 
@@ -108,8 +125,9 @@ public class DatabaseManager {
 
             return stmt.executeUpdate();
         } catch (SQLException e) {
-            log.error("[DatabaseManager] Update execution failed: {}", sql, e);
-            throw new DatabaseException("Update execution failed", e);
+            String errorDetails = formatSQLError(e, sql);
+            log.error("[DatabaseManager] Update execution failed: {}", errorDetails, e);
+            throw new DatabaseException("Update execution failed: " + errorDetails, e);
         }
     }
 
@@ -137,8 +155,9 @@ public class DatabaseManager {
                 conn.setAutoCommit(true);
             }
         } catch (SQLException e) {
-            log.error("[DatabaseManager] Transaction execution failed", e);
-            throw new DatabaseException("Transaction execution failed", e);
+            String errorDetails = formatSQLError(e, "Transaction");
+            log.error("[DatabaseManager] Transaction execution failed: {}", errorDetails, e);
+            throw new DatabaseException("Transaction execution failed: " + errorDetails, e);
         }
     }
 
@@ -160,8 +179,9 @@ public class DatabaseManager {
             stmt.executeBatch();
 
         } catch (SQLException e) {
-            log.error("[DatabaseManager] Batch execution failed: {}", sql, e);
-            throw new DatabaseException("Batch execution failed", e);
+            String errorDetails = formatSQLError(e, sql);
+            log.error("[DatabaseManager] Batch execution failed: {}", errorDetails, e);
+            throw new DatabaseException("Batch execution failed: " + errorDetails, e);
         }
     }
 
@@ -175,6 +195,45 @@ public class DatabaseManager {
             asyncExecutor.shutdown();
             log.info("[DatabaseManager] Async executor shut down");
         }
+    }
+
+    /**
+     * Format SQL error details for better debugging
+     */
+    private String formatSQLError(SQLException e, String sql) {
+        StringBuilder details = new StringBuilder();
+        details.append("SQL State: ").append(e.getSQLState()).append(", ");
+        details.append("Error Code: ").append(e.getErrorCode()).append(", ");
+        details.append("Message: ").append(e.getMessage());
+        
+        if (sql != null && !sql.isEmpty()) {
+            // Truncate SQL for readability
+            String truncatedSQL = sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
+            details.append(", SQL: ").append(truncatedSQL);
+        }
+        
+        return details.toString();
+    }
+
+    /**
+     * Check if an SQLException indicates a recoverable error
+     */
+    private boolean isRecoverableError(SQLException e) {
+        String sqlState = e.getSQLState();
+        int errorCode = e.getErrorCode();
+        
+        // Connection errors that might be temporary
+        if (sqlState != null) {
+            return sqlState.startsWith("08")    // Connection exception
+                || sqlState.startsWith("40")    // Transaction rollback
+                || sqlState.equals("HY000");    // General error that might be temporary
+        }
+        
+        // MariaDB/MySQL specific error codes for temporary issues
+        return errorCode == 1205    // Lock wait timeout
+            || errorCode == 1213    // Deadlock
+            || errorCode == 2006    // MySQL server has gone away
+            || errorCode == 2013;   // Lost connection to MySQL server
     }
 
     // Functional interfaces for database operations
@@ -205,8 +264,50 @@ public class DatabaseManager {
 
     // Custom exception for database operations
     public static class DatabaseException extends RuntimeException {
+        private final String sqlState;
+        private final int errorCode;
+        private final boolean recoverable;
+        
         public DatabaseException(String message, Throwable cause) {
             super(message, cause);
+            
+            if (cause instanceof SQLException sqlException) {
+                this.sqlState = sqlException.getSQLState();
+                this.errorCode = sqlException.getErrorCode();
+                this.recoverable = isRecoverableFromSQLException(sqlException);
+            } else {
+                this.sqlState = null;
+                this.errorCode = 0;
+                this.recoverable = false;
+            }
+        }
+        
+        public String getSqlState() {
+            return sqlState;
+        }
+        
+        public int getErrorCode() {
+            return errorCode;
+        }
+        
+        public boolean isRecoverable() {
+            return recoverable;
+        }
+        
+        private boolean isRecoverableFromSQLException(SQLException e) {
+            String sqlState = e.getSQLState();
+            int errorCode = e.getErrorCode();
+            
+            if (sqlState != null) {
+                return sqlState.startsWith("08")    // Connection exception
+                    || sqlState.startsWith("40")    // Transaction rollback
+                    || sqlState.equals("HY000");    // General error that might be temporary
+            }
+            
+            return errorCode == 1205    // Lock wait timeout
+                || errorCode == 1213    // Deadlock
+                || errorCode == 2006    // MySQL server has gone away
+                || errorCode == 2013;   // Lost connection to MySQL server
         }
     }
 }

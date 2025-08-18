@@ -257,8 +257,8 @@ public class RequestProcessor {
 
     private void storeResponse(NetworkResponse response) {
         String sql = """
-                INSERT INTO response_queue (request_id, server_id, status_code, headers, body, content_type, processed_time_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO response_queue (request_id, server_id, status_code, headers, body, content_type, processed_time_ms, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
                 """;
 
         try {

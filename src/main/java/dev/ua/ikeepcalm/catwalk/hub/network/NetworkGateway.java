@@ -305,8 +305,8 @@ public class NetworkGateway {
     private CompletableFuture<Boolean> storeRequest(NetworkRequest request) {
         String sql = """
                 INSERT INTO request_queue (request_id, target_server_id, endpoint_path, http_method,
-                                         headers, query_params, body, priority, timeout_seconds, max_retries, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                         headers, query_params, body, priority, timeout_seconds, max_retries, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                 """;
 
         return databaseManager.executeUpdateAsync(sql, stmt -> {
