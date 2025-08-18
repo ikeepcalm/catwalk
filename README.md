@@ -39,7 +39,7 @@
 
 1. **Download the latest release** or build from source:
    ```bash
-   git clone https://github.com/your-org/catwalk.git
+   git clone https://github.com/ikeepcalm/catwalk
    cd catwalk
    ./gradlew shadowJar
    ```
@@ -100,7 +100,7 @@ CatWalk uses a comprehensive database schema:
 
 ### Base URL
 ```
-http://your-server:4567/api/v1
+http://your-server:4567/
 ```
 
 ## 🔧 Development
@@ -108,7 +108,7 @@ http://your-server:4567/api/v1
 ### Building from Source
 
 ```bash
-git clone https://github.com/your-org/catwalk.git
+git clone https://github.com/ikeepcalm/catwalk
 cd catwalk
 ./gradlew shadowJar
 ```
@@ -168,8 +168,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Issues**: [GitHub Issues](https://github.com/your-org/catwalk/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/your-org/catwalk/discussions)
-- **Discord**: [Join our Discord](https://discord.gg/your-invite)
-- **Documentation**: [Wiki](https://github.com/your-org/catwalk/wiki)
+- **Documentation**: [Wiki](https://github.com/ikeepcalm/catwalk/wiki)
 
 ---
 
