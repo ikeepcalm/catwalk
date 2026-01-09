@@ -143,7 +143,7 @@ public class BridgeEventHandlerProcessor {
             if (!context.res().isCommitted()) {
                 context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of(
                         "error", "Internal server error",
-                        "message", e.getMessage(),
+                        "message", e.getMessage() != null ? e.getMessage() : "Unknown error",
                         "endpoint", context.path()
                 ));
             }
@@ -361,7 +361,7 @@ public class BridgeEventHandlerProcessor {
                     Throwable cause = e instanceof CompletionException ? e.getCause() : e;
                     CatWalkLogger.error("Async operation failed", cause);
                     if (!context.res().isCommitted()) {
-                        context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", cause.getMessage()));
+                        context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", cause.getMessage() != null ? cause.getMessage() : "Unknown error"));
                     }
                     return null;
                 }));
