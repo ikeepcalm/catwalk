@@ -9,7 +9,6 @@ import io.javalin.config.JavalinConfig;
 import io.javalin.http.Handler;
 import io.javalin.http.HandlerType;
 import io.javalin.http.UnauthorizedResponse;
-import io.javalin.plugin.bundled.RouteOverviewPlugin;
 import io.javalin.websocket.WsConfig;
 import lombok.Getter;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -39,6 +38,8 @@ public class WebServer {
     private final List<String> whitelistedPaths;
 
     private final boolean isAuthEnabled;
+
+    @Getter
     private final boolean disableSwagger;
     private final boolean tlsEnabled;
     private final boolean sni;
@@ -140,23 +141,22 @@ public class WebServer {
     }
 
     private void setupOpenApiEndpoints() {
-        // Custom OpenAPI endpoint using our generator
-        javalin.get("/openapi.json", ctx -> {
-            try {
-                String spec = openApiGenerator.generateOpenApiSpec();
-                ctx.contentType("application/json").result(spec);
-                log.info("[WebServer] Generated custom OpenAPI spec with " + openApiGenerator.getRouteCount() + " routes");
-            } catch (Exception e) {
-                log.severe("[WebServer] Failed to generate OpenAPI spec: " + e.getMessage());
-                ctx.status(500).json(java.util.Map.of("error", "Failed to generate OpenAPI specification"));
-            }
-        });
-
-        javalin.get("/openapi", ctx -> {
-            ctx.redirect("/openapi.json");
-        });
-
         if (!disableSwagger) {
+            javalin.get("/openapi.json", ctx -> {
+                try {
+                    String spec = openApiGenerator.generateOpenApiSpec();
+                    ctx.contentType("application/json").result(spec);
+                    log.info("[WebServer] Generated custom OpenAPI spec with " + openApiGenerator.getRouteCount() + " routes");
+                } catch (Exception e) {
+                    log.severe("[WebServer] Failed to generate OpenAPI spec: " + e.getMessage());
+                    ctx.status(500).json(java.util.Map.of("error", "Failed to generate OpenAPI specification"));
+                }
+            });
+
+            javalin.get("/openapi", ctx -> {
+                ctx.redirect("/openapi.json");
+            });
+
             setupSwaggerRoutes();
         }
     }
@@ -174,6 +174,56 @@ public class WebServer {
         // Serve ReDoc manually
         javalin.get("/redoc", ctx -> {
             ctx.html(generateRedocHtml());
+        });
+
+        javalin.get("/", ctx -> {
+            ctx.html("""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>CatWalk API Server</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; margin: 40px; }
+                            .header { color: #2c3e50; }
+                            .info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+                            a { color: #3498db; text-decoration: none; }
+                            a:hover { text-decoration: underline; }
+                            ul { list-style-type: none; padding: 0; }
+                            li { margin: 10px 0; }
+                        </style>
+                    </head>
+                    <body>
+                        <h1 class="header">CatWalk REST API Server</h1>
+                        <div class="info">
+                            <strong>Server Mode:</strong> %s<br>
+                            <strong>Server ID:</strong> %s<br>
+                            <strong>Version:</strong> %s
+                        </div>
+                        <h2>API Documentation</h2>
+                        <ul>
+                            <li>📊 <a href="/swagger">Swagger UI</a> - Interactive API explorer</li>
+                            <li>📄 <a href="/openapi.json">OpenAPI Specification</a> - Raw API spec</li>
+                        </ul>
+                        %s
+                    </body>
+                    </html>
+                    """.formatted(
+                    main.isHubMode() ? "Hub Gateway" : "Backend Server",
+                    main.getServerId(),
+                    main.getPluginMeta().getVersion(),
+                    main.isHubMode() ?
+                            "<h2>Network Endpoints</h2><ul><li>🌐 <a href=\"/v1/network/status\">Network Status</a></li><li>🖥️ <a href=\"/v1/network/servers\">Network Servers</a></li></ul>" :
+                            ""
+            ));
+        });
+
+        javalin.get("/health", ctx -> {
+            ctx.json(java.util.Map.of(
+                    "status", "healthy",
+                    "timestamp", System.currentTimeMillis(),
+                    "server", main.getServerId(),
+                    "mode", main.isHubMode() ? "hub" : "backend"
+            ));
         });
 
         log.info("[WebServer] Custom Swagger UI available at /swagger");
@@ -323,19 +373,19 @@ public class WebServer {
      */
     private void registerAnnotatedRoutes(Object handlerInstance) {
         Class<?> clazz = handlerInstance.getClass();
-        
+
         for (java.lang.reflect.Method method : clazz.getDeclaredMethods()) {
             io.javalin.openapi.OpenApi openApiAnnotation = method.getAnnotation(io.javalin.openapi.OpenApi.class);
             if (openApiAnnotation == null) continue;
-            
+
             io.javalin.openapi.HttpMethod[] httpMethods = openApiAnnotation.methods().length > 0 ?
                     openApiAnnotation.methods() :
                     new io.javalin.openapi.HttpMethod[]{io.javalin.openapi.HttpMethod.GET};
-            
+
             for (io.javalin.openapi.HttpMethod httpMethod : httpMethods) {
                 HandlerType handlerType = convertHttpMethodToHandlerType(httpMethod);
                 String path = openApiAnnotation.path();
-                
+
                 Handler handler = ctx -> {
                     try {
                         method.setAccessible(true);
@@ -345,7 +395,7 @@ public class WebServer {
                         ctx.status(500).result("Internal server error");
                     }
                 };
-                
+
                 addRoute(handlerType, path, handler);
                 log.info("Registered " + handlerType + " route: " + path);
             }

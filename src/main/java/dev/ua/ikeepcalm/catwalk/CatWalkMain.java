@@ -10,7 +10,6 @@ import dev.ua.ikeepcalm.catwalk.common.utils.LagDetector;
 import dev.ua.ikeepcalm.catwalk.hub.network.NetworkGateway;
 import dev.ua.ikeepcalm.catwalk.hub.network.NetworkRegistry;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServer;
-import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServerRoutes;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.services.CatWalkWebserverService;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.services.CatWalkWebserverServiceImpl;
 import io.papermc.paper.plugin.configuration.PluginMeta;
@@ -23,17 +22,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public class CatWalkMain extends JavaPlugin {
 
+    public static CatWalkMain instance;
     private static java.util.logging.Logger log;
-
+    private final LagDetector lagDetector;
+    private final Server server;
     @Getter
     private int maxConsoleBufferSize = 1000;
-    public static CatWalkMain instance;
-    private final LagDetector lagDetector;
-
     @Getter
     private Gson gson;
-
-    private final Server server;
     private WebServer app;
 
     @Getter
@@ -88,7 +84,7 @@ public class CatWalkMain extends JavaPlugin {
             // Initialize database connection (skip in standalone mode)
             if (!isStandaloneMode) {
                 initializeDatabase(bukkitConfig);
-                
+
                 // Initialize network registry
                 this.networkRegistry = new NetworkRegistry(databaseManager, serverId, isHubMode);
             } else {
@@ -134,12 +130,12 @@ public class CatWalkMain extends JavaPlugin {
             DatabaseConfig dbConfig = DatabaseConfig.fromBukkitConfig(config);
             CatWalkLogger.info("Initializing database connection to %s:%d/%s",
                     dbConfig.getHost(), dbConfig.getPort(), dbConfig.getDatabase());
-            
+
             this.databaseManager = new DatabaseManager(dbConfig);
             CatWalkLogger.success("Database connection established and schema initialized successfully");
 
         } catch (DatabaseManager.DatabaseException e) {
-            CatWalkLogger.error("Database initialization failed with SQL error [%s]: %s", 
+            CatWalkLogger.error("Database initialization failed with SQL error [%s]: %s",
                     e.getSqlState(), e.getMessage());
             if (e.isRecoverable()) {
                 CatWalkLogger.warn("This appears to be a recoverable error. Check your database connection and try restarting.");
@@ -156,7 +152,7 @@ public class CatWalkMain extends JavaPlugin {
 
     private void loadHubConfiguration(FileConfiguration config) {
         Object hubEnabled = config.get("hub.enabled", false);
-        
+
         if (hubEnabled instanceof String && "standalone".equalsIgnoreCase((String) hubEnabled)) {
             this.isStandaloneMode = true;
             this.isHubMode = false;
@@ -164,7 +160,7 @@ public class CatWalkMain extends JavaPlugin {
             this.isHubMode = config.getBoolean("hub.enabled", false);
             this.isStandaloneMode = false;
         }
-        
+
         this.serverId = config.getString("hub.server-id", "unknown");
 
         String mode = isStandaloneMode ? "Standalone" : (isHubMode ? "Hub Gateway" : "Backend Server");
@@ -195,17 +191,16 @@ public class CatWalkMain extends JavaPlugin {
 
     private void initializeStandaloneComponents() {
         CatWalkLogger.info("Initializing Standalone Server components...");
-        
+
         // In standalone mode, we don't need database-based components
         // All addon endpoints are registered directly on the local webserver
         // No request processing or network gateway needed
-        
+
         CatWalkLogger.success("Standalone Server initialized successfully");
         CatWalkLogger.info("All addon endpoints will be registered directly on this server");
     }
 
     private void registerCoreApiRoutes() {
-        WebServerRoutes.addBasicRoutes(this, log, app);
         if (isHubMode && !isStandaloneMode) {
             hubGateway.registerNetworkManagementRoutes();
         }
