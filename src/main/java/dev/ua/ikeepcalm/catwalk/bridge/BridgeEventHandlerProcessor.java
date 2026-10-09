@@ -119,7 +119,8 @@ public class BridgeEventHandlerProcessor {
                 }
                 
                 String token = authHeader.substring(7);
-                String configuredKey = CatWalkMain.instance.getWebServer().getAuthKey();
+                WebServer webServer = CatWalkMain.instance.getWebServer();
+                String configuredKey = webServer != null ? webServer.getAuthKey() : null;
                 if (!token.equals(configuredKey)) {
                     CatWalkLogger.debug("Unauthorized request to %s - invalid Bearer token", context.path());
                     context.status(HttpStatus.UNAUTHORIZED).json(Map.of("error", "Invalid authentication token"));

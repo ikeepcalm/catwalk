@@ -13,6 +13,7 @@ import dev.ua.ikeepcalm.catwalk.hub.network.NetworkRegistry;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServer;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.services.CatWalkWebserverService;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.services.CatWalkWebserverServiceImpl;
+import io.javalin.Javalin;
 import io.papermc.paper.plugin.configuration.PluginMeta;
 import lombok.Getter;
 import org.bukkit.Bukkit;
@@ -32,6 +33,10 @@ public class CatWalkMain extends JavaPlugin {
     @Getter
     private Gson gson;
     private WebServer app;
+
+    // Kept after a stop or failed restart so getWebserver() never returns null.
+    @Getter
+    private Javalin lastJavalin;
 
     @Getter
     private boolean isHubMode = false;
@@ -101,6 +106,7 @@ public class CatWalkMain extends JavaPlugin {
             server.getServicesManager().register(CatWalkWebserverService.class, webserverServiceImpl, this, ServicePriority.Normal);
 
             setupWebServer(bukkitConfig);
+            webserverServiceImpl.replayRegistrations();
 
             // Initialize based on server mode
             if (isStandaloneMode) {
@@ -211,14 +217,22 @@ public class CatWalkMain extends JavaPlugin {
         }
     }
 
+    // Publish the server only once it is listening, so a failed start leaves app null.
     private void setupWebServer(FileConfiguration bukkitConfig) {
-        app = new WebServer(this, bukkitConfig, log);
-        app.start(bukkitConfig.getInt("port", 4567));
+        WebServer candidate = new WebServer(this, bukkitConfig, log);
+        candidate.start(bukkitConfig.getInt("port", 4567));
+        app = candidate;
+        lastJavalin = candidate.getJavalin();
+    }
+
+    private void stopWebServer() {
+        app.stop();
+        app = null;
     }
 
     public void reload() {
         if (app != null) {
-            app.stop();
+            stopWebServer();
         }
 
         CatWalkLogger.info("CatWalk reloading...");
@@ -285,7 +299,7 @@ public class CatWalkMain extends JavaPlugin {
         }
 
         if (app != null) {
-            app.stop();
+            stopWebServer();
         }
 
         RequestLogger.shutdown();

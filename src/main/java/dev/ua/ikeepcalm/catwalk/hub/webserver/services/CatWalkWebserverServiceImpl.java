@@ -42,7 +42,8 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
 
     @Override
     public Javalin getWebserver() {
-        return webServer().getJavalin();
+        WebServer server = webServer();
+        return server != null ? server.getJavalin() : plugin.getLastJavalin();
     }
 
     @Override
@@ -101,7 +102,10 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
      * against a new WebServer instance after {@link CatWalkMain#reload()}.
      */
     private void register(Runnable action) {
-        action.run();
+        // With no server (failed restart) the action is only queued for the next replay.
+        if (webServer() != null) {
+            action.run();
+        }
         replayActions.add(action);
     }
 
@@ -206,7 +210,8 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
 
     @Override
     public String getAuthKey() {
-        return webServer().getAuthKey();
+        WebServer server = webServer();
+        return server != null ? server.getAuthKey() : plugin.getConfig().getString("key", "change_me");
     }
 
     private record ErrorResponse(String error, String message) {
