@@ -1,6 +1,7 @@
 package dev.ua.ikeepcalm.catwalk;
 
 import com.google.gson.Gson;
+import dev.ua.ikeepcalm.catwalk.common.audit.CatWalkAudit;
 import dev.ua.ikeepcalm.catwalk.common.commands.CatWalkCommand;
 import dev.ua.ikeepcalm.catwalk.common.database.DatabaseConfig;
 import dev.ua.ikeepcalm.catwalk.common.database.DatabaseManager;
@@ -11,8 +12,15 @@ import dev.ua.ikeepcalm.catwalk.common.utils.RequestLogger;
 import dev.ua.ikeepcalm.catwalk.hub.network.NetworkGateway;
 import dev.ua.ikeepcalm.catwalk.hub.network.NetworkRegistry;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServer;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.audit.PeerRowLimiter;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.audit.RequestSummary;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.audit.RouteAudit;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.services.CatWalkWebserverService;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.services.CatWalkWebserverServiceImpl;
+import dev.ua.ikeepcalm.mysterria.audit.client.api.AuditOutcome;
+import dev.ua.ikeepcalm.mysterria.audit.client.api.AuditPrivacy;
+import dev.ua.ikeepcalm.mysterria.audit.client.api.AuditRisk;
+import io.javalin.Javalin;
 import io.papermc.paper.plugin.configuration.PluginMeta;
 import lombok.Getter;
 import org.bukkit.Bukkit;
@@ -20,6 +28,10 @@ import org.bukkit.Server;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class CatWalkMain extends JavaPlugin {
 
@@ -32,6 +44,10 @@ public class CatWalkMain extends JavaPlugin {
     @Getter
     private Gson gson;
     private WebServer app;
+
+    // Kept after a stop or failed restart so getWebserver() never returns null.
+    @Getter
+    private Javalin lastJavalin;
 
     @Getter
     private boolean isHubMode = false;
@@ -57,6 +73,25 @@ public class CatWalkMain extends JavaPlugin {
 
     private CatWalkWebserverServiceImpl webserverServiceImpl;
 
+    /** Shared audit ledger producer; a no-op instance until onEnable creates the real one. */
+    @Getter
+    private CatWalkAudit audit = CatWalkAudit.disabled();
+
+    /** Route ownership and api.route_registered rows; outlives reloads like the service does. */
+    @Getter
+    private RouteAudit routeAudit = new RouteAudit(audit);
+
+    /** Hourly read-request counts; kept across reloads so a reload does not drop a window. */
+    @Getter
+    private RequestSummary requestSummary = new RequestSummary(audit);
+
+    /** Per-peer cap on noisy api.request rows; kept across reloads like the summary. */
+    @Getter
+    private PeerRowLimiter requestLimiter = new PeerRowLimiter(audit, PeerRowLimiter.DEFAULT_LIMIT);
+
+    /** The 30 s audit timer; cancelled before the final flush so it cannot race it. */
+    private BukkitTask auditTicker;
+
     public CatWalkMain() {
         super();
         instance = this;
@@ -80,6 +115,7 @@ public class CatWalkMain extends JavaPlugin {
             maxConsoleBufferSize = bukkitConfig.getInt("websocketConsoleBuffer");
 
             RequestLogger.initialize(getDataFolder(), bukkitConfig.getBoolean("request-logging.enabled", true));
+            setupAudit(bukkitConfig);
 
             new CatWalkCommand(this);
 
@@ -100,7 +136,8 @@ public class CatWalkMain extends JavaPlugin {
             webserverServiceImpl = new CatWalkWebserverServiceImpl(this);
             server.getServicesManager().register(CatWalkWebserverService.class, webserverServiceImpl, this, ServicePriority.Normal);
 
-            setupWebServer(bukkitConfig);
+            setupWebServer(bukkitConfig, "enable");
+            webserverServiceImpl.replayRegistrations();
 
             // Initialize based on server mode
             if (isStandaloneMode) {
@@ -127,6 +164,22 @@ public class CatWalkMain extends JavaPlugin {
             log.severe("Failed to initialize: " + e.getMessage());
             e.printStackTrace();
             getServer().getPluginManager().disablePlugin(this);
+        }
+    }
+
+    /** Read once per enable; /catwalk reload recreates neither the client nor its windows. */
+    private void setupAudit(FileConfiguration config) {
+        audit = CatWalkAudit.create(this, config.getBoolean("audit.enabled", true));
+        routeAudit = new RouteAudit(audit);
+        requestSummary = new RequestSummary(audit);
+        requestLimiter = new PeerRowLimiter(audit, config.getInt("audit.per-peer-row-limit", PeerRowLimiter.DEFAULT_LIMIT));
+        if (audit.isEnabled()) {
+            // Rolls and emits the hourly summary and the per-minute suppression rows off the main
+            // thread; both tick() methods swallow their own failures.
+            auditTicker = Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> {
+                requestSummary.tick();
+                requestLimiter.tick();
+            }, 600L, 600L);
         }
     }
 
@@ -211,14 +264,59 @@ public class CatWalkMain extends JavaPlugin {
         }
     }
 
-    private void setupWebServer(FileConfiguration bukkitConfig) {
-        app = new WebServer(this, bukkitConfig, log);
-        app.start(bukkitConfig.getInt("port", 4567));
+    // Publish the server only once it is listening, so a failed start leaves app null.
+    private void setupWebServer(FileConfiguration bukkitConfig, String trigger) {
+        WebServer candidate = new WebServer(this, bukkitConfig, log);
+        int port = bukkitConfig.getInt("port", 4567);
+        try {
+            candidate.start(port);
+        } catch (RuntimeException e) {
+            auditWebServer("catwalk.webserver_started", AuditOutcome.FAILED, candidate, port, trigger, e);
+            throw e;
+        }
+        app = candidate;
+        lastJavalin = candidate.getJavalin();
+        auditWebServer("catwalk.webserver_started", AuditOutcome.COMMITTED, candidate, port, trigger, null);
+    }
+
+    private void stopWebServer(String trigger) {
+        WebServer stopped = app;
+        int port = getConfig().getInt("port", 4567);
+        try {
+            stopped.stop();
+        } catch (RuntimeException e) {
+            auditWebServer("catwalk.webserver_stopped", AuditOutcome.FAILED, stopped, port, trigger, e);
+            throw e;
+        }
+        app = null;
+        auditWebServer("catwalk.webserver_stopped", AuditOutcome.COMMITTED, stopped, port, trigger, null);
+    }
+
+    private void auditWebServer(String eventType, AuditOutcome outcome, WebServer server, int port,
+                                String trigger, Throwable error) {
+        audit.emit(() -> {
+            Map<String, Object> metadata = new LinkedHashMap<>(server.auditDescription());
+            metadata.put("port", port);
+            metadata.put("mode", getModeName());
+            metadata.put("server_id", audit.serverId());
+            metadata.put("catwalk_server_id", serverId);
+            metadata.put("trigger", trigger);
+            if (error != null) {
+                metadata.put("error_class", error.getClass().getName());
+            }
+            return new CatWalkAudit.AuditRow(eventType, outcome,
+                    outcome == AuditOutcome.FAILED ? AuditRisk.HIGH : AuditRisk.NORMAL, AuditPrivacy.INTERNAL,
+                    null, serverId + ":" + port, null, null, metadata);
+        });
+    }
+
+    public String getModeName() {
+        return isStandaloneMode ? "standalone" : (isHubMode ? "hub" : "backend");
     }
 
     public void reload() {
         if (app != null) {
-            app.stop();
+            stopWebServer("reload");
         }
 
         CatWalkLogger.info("CatWalk reloading...");
@@ -241,7 +339,7 @@ public class CatWalkMain extends JavaPlugin {
             requestProcessor = null;
         }
 
-        setupWebServer(bukkitConfig);
+        setupWebServer(bukkitConfig, "reload");
 
         // Reinitialize components based on mode
         if (isStandaloneMode) {
@@ -266,29 +364,41 @@ public class CatWalkMain extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        PluginMeta pluginMeta = getPluginMeta();
+        try {
+            PluginMeta pluginMeta = getPluginMeta();
 
-        log.info(String.format("[%s] Disabled Version %s", pluginMeta.getDescription(), pluginMeta.getVersion()));
+            log.info(String.format("[%s] Disabled Version %s", pluginMeta.getDescription(), pluginMeta.getVersion()));
 
-        // Cleanup components
-        if (hubGateway != null) {
-            hubGateway.shutdown();
-        }
-        if (requestProcessor != null) {
-            requestProcessor.shutdown();
-        }
-        if (networkRegistry != null) {
-            networkRegistry.shutdown();
-        }
-        if (databaseManager != null) {
-            databaseManager.shutdown();
-        }
+            // Cleanup components
+            if (hubGateway != null) {
+                hubGateway.shutdown();
+            }
+            if (requestProcessor != null) {
+                requestProcessor.shutdown();
+            }
+            if (networkRegistry != null) {
+                networkRegistry.shutdown();
+            }
+            if (databaseManager != null) {
+                databaseManager.shutdown();
+            }
 
-        if (app != null) {
-            app.stop();
-        }
+            if (app != null) {
+                stopWebServer("disable");
+            }
 
-        RequestLogger.shutdown();
+            RequestLogger.shutdown();
+        } finally {
+            try {
+                if (auditTicker != null) {
+                    auditTicker.cancel();
+                }
+                requestSummary.flushAll();
+                requestLimiter.flushAll();
+            } finally {
+                audit.close();
+            }
+        }
     }
 
     public WebServer getWebServer() {

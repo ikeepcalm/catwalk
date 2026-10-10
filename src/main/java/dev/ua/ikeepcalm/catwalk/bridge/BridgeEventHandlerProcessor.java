@@ -9,6 +9,7 @@ import dev.ua.ikeepcalm.catwalk.bridge.annotations.BridgeRequestBody;
 import dev.ua.ikeepcalm.catwalk.common.utils.json.GsonSingleton;
 import dev.ua.ikeepcalm.catwalk.common.utils.CatWalkLogger;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServer;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.audit.ApiRequestAuditor;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import io.javalin.openapi.HttpMethod;
@@ -114,14 +115,17 @@ public class BridgeEventHandlerProcessor {
                 String authHeader = context.header("Authorization");
                 if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                     CatWalkLogger.debug("Unauthorized request to %s - missing Bearer header", context.path());
+                    context.attribute(ApiRequestAuditor.ATTR_HANDLER_AUTH, ApiRequestAuditor.HANDLER_AUTH_BEARER_REQUIRED);
                     context.status(HttpStatus.UNAUTHORIZED).json(Map.of("error", "Authentication required"));
                     return;
                 }
                 
                 String token = authHeader.substring(7);
-                String configuredKey = CatWalkMain.instance.getWebServer().getAuthKey();
+                WebServer webServer = CatWalkMain.instance.getWebServer();
+                String configuredKey = webServer != null ? webServer.getAuthKey() : null;
                 if (!token.equals(configuredKey)) {
                     CatWalkLogger.debug("Unauthorized request to %s - invalid Bearer token", context.path());
+                    context.attribute(ApiRequestAuditor.ATTR_HANDLER_AUTH, ApiRequestAuditor.HANDLER_AUTH_BEARER_INVALID);
                     context.status(HttpStatus.UNAUTHORIZED).json(Map.of("error", "Invalid authentication token"));
                     return;
                 }

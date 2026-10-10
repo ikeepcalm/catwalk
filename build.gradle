@@ -9,6 +9,18 @@ group = 'dev.ua.uaproject.catwalk'
 version = '0.8-SNAPSHOT'
 
 repositories {
+    // audit-client is vendored in libs/maven so CI runners without ~/.m2 or Nexus access can resolve it.
+    maven {
+        name = "vendored"
+        url = uri("libs/maven")
+        metadataSources {
+            mavenPom()
+            artifact()
+        }
+        content {
+            includeGroup("dev.ua.ikeepcalm.mysterria")
+        }
+    }
     mavenCentral()
     maven {
         name = "codemc-snapshots"
@@ -32,6 +44,13 @@ repositories {
     }
 }
 
+configurations {
+    // Bundled into the shaded jar but kept out of the published POM and module metadata, so API
+    // consumers never try to resolve the vendored audit client.
+    shade
+    compileOnly.extendsFrom shade
+}
+
 dependencies {
     // Core Paper API (always included)
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
@@ -47,6 +66,7 @@ dependencies {
     // Lightweight dependencies to include in JAR
     implementation("com.google.code.gson:gson:2.13.1")
     implementation("io.javalin.community.openapi:javalin-openapi-plugin:6.6.0")
+    shade("dev.ua.ikeepcalm.mysterria:audit-client:1.0.2")
     compileOnly("org.mariadb.jdbc:mariadb-java-client:3.3.2")
     compileOnly("com.zaxxer:HikariCP:5.1.0")
 
@@ -118,4 +138,7 @@ shadowJar {
     }
 
     relocate 'com.google.gson', 'dev.ua.uaproject.catwalk.libs.gson'
+    relocate 'dev.ua.ikeepcalm.mysterria.audit', 'dev.ua.uaproject.catwalk.libs.audit'
+    // Keep the default runtimeClasspath and add the shade-only audit client on top.
+    getConfigurations().set([project.configurations.runtimeClasspath, project.configurations.shade])
 }

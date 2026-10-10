@@ -4,6 +4,8 @@ import dev.ua.ikeepcalm.catwalk.CatWalkMain;
 import dev.ua.ikeepcalm.catwalk.common.database.model.EndpointDefinition;
 import dev.ua.ikeepcalm.catwalk.common.utils.RequestLogger;
 import dev.ua.ikeepcalm.catwalk.common.utils.json.GsonJsonMapper;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.audit.ApiRequestAuditor;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.audit.RouteAudit;
 import io.javalin.Javalin;
 import io.javalin.community.ssl.SslPlugin;
 import io.javalin.config.JavalinConfig;
@@ -20,7 +22,9 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
@@ -50,6 +54,8 @@ public class WebServer {
     @Getter
     private final boolean disableSwagger;
     private final boolean tlsEnabled;
+    /** True once the SSL plugin was actually registered (the keystore existed and loaded). */
+    private boolean tlsActive;
     private final boolean sni;
     private final String keyStorePath;
     private final String keyStorePassword;
@@ -64,6 +70,8 @@ public class WebServer {
 
     @Getter
     private final CustomOpenApiGenerator openApiGenerator;
+
+    private final ApiRequestAuditor requestAuditor;
 
     public WebServer(CatWalkMain main, FileConfiguration bukkitConfig, Logger logger) {
         this.main = main;
@@ -83,6 +91,8 @@ public class WebServer {
         this.serverUrl = bukkitConfig.getString("server-url", "http://localhost:" + bukkitConfig.getInt("port", 4567));
         this.securePort = bukkitConfig.getInt("port", 4567);
         this.openApiGenerator = new CustomOpenApiGenerator(main);
+        this.requestAuditor = new ApiRequestAuditor(main.getAudit(), main.getRequestSummary(), main.getRequestLimiter(),
+                main.getRouteAudit(), authKey, X_CATWALK_COOKIE);
         this.javalin = Javalin.create(this::configureJavalin);
 
         setupRequestLogging();
@@ -115,6 +125,7 @@ public class WebServer {
 
     private void setupAuthentication() {
         this.javalin.beforeMatched(ctx -> {
+            requestAuditor.onRouteMatched(ctx);
 
             if (!isAuthEnabled) {
                 ctx.attribute(ATTR_AUTH_INFO, "disabled");
@@ -172,23 +183,33 @@ public class WebServer {
     }
 
     private void setupRequestLogging() {
-        if (!requestLoggingEnabled) {
+        if (!requestLoggingEnabled && !requestAuditor.isEnabled()) {
             return;
         }
 
-        this.javalin.before(ctx -> ctx.attribute(ATTR_START_TIME, System.currentTimeMillis()));
+        this.javalin.before(ctx -> {
+            ctx.attribute(ATTR_START_TIME, System.currentTimeMillis());
+            requestAuditor.onRequestStart(ctx);
+        });
         this.javalin.after(this::logRequest);
     }
 
     private void logRequest(Context ctx) {
         Long startTime = ctx.attribute(ATTR_START_TIME);
         long durationMs = startTime != null ? System.currentTimeMillis() - startTime : -1;
+        String rawAuthInfo = ctx.attribute(ATTR_AUTH_INFO);
 
-        String authInfo = ctx.attribute(ATTR_AUTH_INFO);
-        if (authInfo == null) {
-            authInfo = "n/a";
+        try {
+            if (requestLoggingEnabled) {
+                writeRequestLog(ctx, durationMs, rawAuthInfo == null ? "n/a" : rawAuthInfo);
+            }
+        } finally {
+            requestAuditor.onRequestComplete(ctx, durationMs, rawAuthInfo != null,
+                    () -> auditAuthResult(ctx, rawAuthInfo));
         }
+    }
 
+    private void writeRequestLog(Context ctx, long durationMs, String authInfo) {
         String line = String.format(
                 "%s ip=%s method=%-6s path=%s status=%d auth=%s duration_ms=%d user_agent=\"%s\"",
                 Instant.now(), clientIp(ctx), ctx.method(), ctx.path(), ctx.statusCode(),
@@ -198,12 +219,33 @@ public class WebServer {
         RequestLogger.log(line);
     }
 
-    private String clientIp(Context ctx) {
-        String forwarded = ctx.header("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+    /**
+     * Maps the auth attribute set in beforeMatched onto the audit vocabulary. A null attribute
+     * means no route matched, so the key was never checked and is evaluated here instead.
+     */
+    private String auditAuthResult(Context ctx, String authInfo) {
+        if (authInfo == null) {
+            if (!isAuthEnabled) {
+                return ApiRequestAuditor.AUTH_DISABLED;
+            }
+            return isNoAuthPath(ctx.req().getPathInfo())
+                    ? ApiRequestAuditor.AUTH_WHITELISTED : requestAuditor.unmatchedAuthResult(ctx);
         }
-        return ctx.ip();
+        if (authInfo.equals("disabled")) {
+            return ApiRequestAuditor.AUTH_DISABLED;
+        }
+        if (authInfo.equals("not-required")) {
+            return ApiRequestAuditor.AUTH_WHITELISTED;
+        }
+        if (authInfo.startsWith("bearer:") || authInfo.startsWith("cookie:")) {
+            return ApiRequestAuditor.AUTH_OK;
+        }
+        return authInfo.equals("missing") ? ApiRequestAuditor.AUTH_MISSING : ApiRequestAuditor.AUTH_INVALID;
+    }
+
+    private String clientIp(Context ctx) {
+        String forwarded = ApiRequestAuditor.forwardedFor(ctx);
+        return forwarded != null ? forwarded : ctx.ip();
     }
 
     private String sanitize(String value) {
@@ -495,6 +537,9 @@ public class WebServer {
      */
     public void tagRoute(io.javalin.openapi.HttpMethod method, String path, String pluginName, boolean requiresAuth) {
         openApiGenerator.tagRoute(convertHttpMethodToHandlerType(method), path, pluginName, requiresAuth);
+        RouteAudit routeAudit = main.getRouteAudit();
+        routeAudit.registered(new RouteAudit.Descriptor(pluginName, method.name(), path, RouteAudit.KIND_HANDLER),
+                isRouteBlocked(path), pluginName);
     }
 
     /**
@@ -574,6 +619,7 @@ public class WebServer {
                 });
 
                 config.registerPlugin(plugin);
+                tlsActive = true;
                 log.info("TLS is enabled.");
             } else {
                 log.warning(String.format("TLS is enabled but %s doesn't exist. TLS disabled.", fullKeystorePath));
@@ -600,8 +646,13 @@ public class WebServer {
         this.addRoute(HandlerType.DELETE, route, handler);
     }
 
+    /** Whether {@code blocked-paths} prevents {@link #addRoute} from registering {@code route}. */
+    public boolean isRouteBlocked(String route) {
+        return blockedPaths.contains(route) || blockedPaths.contains("/" + route);
+    }
+
     public void addRoute(HandlerType httpMethod, String route, Handler handler) {
-        if (!(blockedPaths.contains(route) || blockedPaths.contains("/" + route))) {
+        if (!isRouteBlocked(route)) {
             this.javalin.addHttpHandler(httpMethod, route, handler);
 
             openApiGenerator.registerStaticRoute(httpMethod, route, handler);
@@ -612,6 +663,20 @@ public class WebServer {
 
     public void ws(String route, Consumer<WsConfig> wsConfig) {
         this.javalin.ws(route, wsConfig);
+    }
+
+    /**
+     * Plain-value snapshot of the security-relevant settings for audit rows. Contains counts only,
+     * never the key, the keystore password or the path lists themselves.
+     */
+    public Map<String, Object> auditDescription() {
+        Map<String, Object> description = new LinkedHashMap<>();
+        description.put("tls", tlsActive);
+        description.put("tls_configured", tlsEnabled);
+        description.put("auth", isAuthEnabled);
+        description.put("blocked_paths_count", blockedPaths == null ? 0 : blockedPaths.size());
+        description.put("whitelisted_paths_count", whitelistedPaths == null ? 0 : whitelistedPaths.size());
+        return description;
     }
 
     public void start(int port) {

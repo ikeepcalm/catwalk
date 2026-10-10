@@ -5,6 +5,7 @@ import dev.ua.ikeepcalm.catwalk.bridge.BridgeEventHandlerProcessor;
 import dev.ua.ikeepcalm.catwalk.common.utils.CatWalkLogger;
 import dev.ua.ikeepcalm.catwalk.hub.network.NetworkRegistry;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServer;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.audit.RouteAudit;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.Handler;
@@ -28,7 +29,11 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
     private final NetworkRegistry networkRegistry;
     private final CatWalkMain plugin;
 
-    private final List<Runnable> replayActions = new CopyOnWriteArrayList<>();
+    private final List<Registration> registrations = new CopyOnWriteArrayList<>();
+
+    /** A replayable registration plus what the audit ledger records about it. */
+    private record Registration(RouteAudit.Descriptor route, Runnable action) {
+    }
 
     public CatWalkWebserverServiceImpl(CatWalkMain main) {
         this.plugin = main;
@@ -42,37 +47,45 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
 
     @Override
     public Javalin getWebserver() {
-        return webServer().getJavalin();
+        WebServer server = webServer();
+        return server != null ? server.getJavalin() : plugin.getLastJavalin();
     }
 
     @Override
     public void get(String path, Handler handler) {
-        register(() -> webServer().get(path, handler));
+        register(route("GET", path), () -> webServer().get(path, handler));
     }
 
     @Override
     public void post(String path, Handler handler) {
-        register(() -> webServer().post(path, handler));
+        register(route("POST", path), () -> webServer().post(path, handler));
     }
 
     @Override
     public void put(String path, Handler handler) {
-        register(() -> webServer().put(path, handler));
+        register(route("PUT", path), () -> webServer().put(path, handler));
     }
 
     @Override
     public void delete(String path, Handler handler) {
-        register(() -> webServer().delete(path, handler));
+        register(route("DELETE", path), () -> webServer().delete(path, handler));
     }
 
     @Override
     public void websocket(String path, Consumer<WsConfig> handler) {
-        register(() -> webServer().ws(path, handler));
+        register(new RouteAudit.Descriptor(null, "WS", path, RouteAudit.KIND_WEBSOCKET),
+                () -> webServer().ws(path, handler));
     }
 
     @Override
     public void registerHandlers(Object handlerInstance) {
-        register(() -> applyRegisterHandlers(handlerInstance));
+        // A handler object expands to several routes; WebServer.tagRoute audits each of them.
+        register(new RouteAudit.Descriptor(null, null, null, RouteAudit.KIND_HANDLER),
+                () -> applyRegisterHandlers(handlerInstance));
+    }
+
+    private static RouteAudit.Descriptor route(String method, String path) {
+        return new RouteAudit.Descriptor(null, method, path, RouteAudit.KIND_ROUTE);
     }
 
     private void applyRegisterHandlers(Object handlerInstance) {
@@ -100,9 +113,26 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
      * Runs a registration action immediately and remembers it so it can be replayed
      * against a new WebServer instance after {@link CatWalkMain#reload()}.
      */
-    private void register(Runnable action) {
-        action.run();
-        replayActions.add(action);
+    private void register(RouteAudit.Descriptor route, Runnable action) {
+        // With no server (failed restart) the action is only queued for the next replay.
+        boolean applied = webServer() != null;
+        if (applied) {
+            action.run();
+        }
+        registrations.add(new Registration(route, action));
+        if (applied) {
+            auditRegistered(route);
+        }
+    }
+
+    private void auditRegistered(RouteAudit.Descriptor route) {
+        if (RouteAudit.KIND_HANDLER.equals(route.kind())) {
+            return;
+        }
+        plugin.getAudit().guard(() -> {
+            boolean blocked = RouteAudit.KIND_ROUTE.equals(route.kind()) && webServer().isRouteBlocked(route.path());
+            plugin.getRouteAudit().registered(route, blocked, null);
+        });
     }
 
     /**
@@ -111,18 +141,23 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
      * since addons typically register once at their own onEnable() and never again.
      */
     public void replayRegistrations() {
-        if (replayActions.isEmpty()) {
+        if (registrations.isEmpty()) {
             return;
         }
 
-        CatWalkLogger.info("Re-registering %d addon endpoint(s) after reload...", replayActions.size());
-        for (Runnable action : replayActions) {
-            try {
-                action.run();
-            } catch (Exception e) {
-                CatWalkLogger.error("Failed to re-register an addon endpoint after reload: %s", e, e.getMessage());
+        CatWalkLogger.info("Re-registering %d addon endpoint(s) after reload...", registrations.size());
+        RouteAudit routeAudit = plugin.getRouteAudit();
+        routeAudit.runAsReplay(() -> {
+            for (Registration registration : registrations) {
+                try {
+                    registration.action().run();
+                    auditRegistered(registration.route());
+                } catch (Exception e) {
+                    CatWalkLogger.error("Failed to re-register an addon endpoint after reload: %s", e, e.getMessage());
+                    routeAudit.failed(registration.route(), e);
+                }
             }
-        }
+        });
     }
 
     private String extractPluginName(Object handlerInstance) {
@@ -148,22 +183,26 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
 
     @Override
     public <T> void getWithResponse(String path, Function<Context, T> responseFunction) {
-        register(() -> webServer().get(path, ctx -> handleResponse(ctx, responseFunction)));
+        register(route("GET", path),
+                () -> webServer().get(path, ctx -> handleResponse(ctx, responseFunction)));
     }
 
     @Override
     public <T> void postWithResponse(String path, Function<Context, T> responseFunction) {
-        register(() -> webServer().post(path, ctx -> handleResponse(ctx, responseFunction)));
+        register(route("POST", path),
+                () -> webServer().post(path, ctx -> handleResponse(ctx, responseFunction)));
     }
 
     @Override
     public <T> void putWithResponse(String path, Function<Context, T> responseFunction) {
-        register(() -> webServer().put(path, ctx -> handleResponse(ctx, responseFunction)));
+        register(route("PUT", path),
+                () -> webServer().put(path, ctx -> handleResponse(ctx, responseFunction)));
     }
 
     @Override
     public <T> void deleteWithResponse(String path, Function<Context, T> responseFunction) {
-        register(() -> webServer().delete(path, ctx -> handleResponse(ctx, responseFunction)));
+        register(route("DELETE", path),
+                () -> webServer().delete(path, ctx -> handleResponse(ctx, responseFunction)));
     }
 
     private <T> void handleResponse(Context ctx, Function<Context, T> responseFunction) {
@@ -206,7 +245,8 @@ public class CatWalkWebserverServiceImpl implements CatWalkWebserverService {
 
     @Override
     public String getAuthKey() {
-        return webServer().getAuthKey();
+        WebServer server = webServer();
+        return server != null ? server.getAuthKey() : plugin.getConfig().getString("key", "change_me");
     }
 
     private record ErrorResponse(String error, String message) {

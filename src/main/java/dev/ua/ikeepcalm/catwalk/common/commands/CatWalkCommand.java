@@ -5,6 +5,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import dev.ua.ikeepcalm.catwalk.CatWalkMain;
+import dev.ua.ikeepcalm.catwalk.common.audit.ReloadAudit;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.CustomOpenApiGenerator;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServer;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -119,7 +120,7 @@ public class CatWalkCommand {
         );
 
         try {
-            plugin.reload();
+            ReloadAudit.run(plugin, sender, plugin::reload);
 
             sender.sendMessage(Component.text()
                     .append(Component.text("[", NamedTextColor.DARK_GRAY))

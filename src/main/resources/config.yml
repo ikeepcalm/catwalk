@@ -131,6 +131,23 @@ request-logging:
   enabled: true
 
 # =================================================================
+# AUDIT LOGGING
+# =================================================================
+
+audit:
+  # Emit forensic rows (non-GET API calls, denied calls, hourly GET summaries, route
+  # registrations, reloads, web server start/stop) to the shared Mysterria audit spool
+  # (plugins/mysterria-audit-spool). Never blocks a request or changes its status or body
+  # (adds an X-Request-Id response header). Read at startup only.
+  enabled: true
+
+  # Per client address (the TCP peer, not X-Forwarded-For), at most this many rows a minute
+  # are written for 4xx responses and missing/wrong keys; the rest are counted into one
+  # api.request_suppressed row per minute. 5xx responses and authenticated writes are never
+  # limited. 0 disables the limit. Read at startup only.
+  per-peer-row-limit: 20
+
+# =================================================================
 # WEBSOCKET SETTINGS
 # =================================================================
 

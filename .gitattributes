@@ -1,0 +1,2 @@
+# Vendored Maven artifacts must stay byte-identical to their checksum files.
+libs/maven/** -text
