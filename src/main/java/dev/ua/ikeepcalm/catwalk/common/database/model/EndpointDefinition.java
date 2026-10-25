@@ -16,6 +16,9 @@ public class EndpointDefinition {
     private String description;
     private List<String> tags;
     private boolean requiresAuth;
+    private List<String> scopes;
+    private int rateLimit;
+    private boolean logRequests;
     private Map<String, Object> parameters;
     private Map<String, Object> requestBody;
     private Map<String, Object> responses;

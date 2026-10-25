@@ -1,22 +1,20 @@
 package dev.ua.ikeepcalm.catwalk.common.commands;
 
 import com.mojang.brigadier.Command;
-import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.tree.LiteralCommandNode;
 import dev.ua.ikeepcalm.catwalk.CatWalkMain;
-import dev.ua.ikeepcalm.catwalk.hub.webserver.CustomOpenApiGenerator;
+import dev.ua.ikeepcalm.catwalk.common.database.model.NetworkServer;
+import dev.ua.ikeepcalm.catwalk.common.utils.CatWalkLogger;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.CustomOpenApiGenerator.RouteInfo;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServer;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
-import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.CommandSender;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -26,293 +24,151 @@ public class CatWalkCommand {
 
     public CatWalkCommand(CatWalkMain plugin) {
         this.plugin = plugin;
-        registerCommand();
+        plugin.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> event.registrar().register(
+                Commands.literal("catwalk")
+                        .requires(source -> source.getSender().hasPermission("catwalk.admin"))
+                        .executes(this::help)
+                        .then(Commands.literal("reload").executes(this::reload))
+                        .then(Commands.literal("info").executes(this::info))
+                        .then(Commands.literal("status").executes(this::status))
+                        .then(Commands.literal("endpoints").executes(this::endpoints))
+                        .then(Commands.literal("network")
+                                .then(Commands.literal("status").executes(this::networkStatus))
+                                .then(Commands.literal("servers").executes(this::networkServers)))
+                        .build(),
+                "CatWalk REST API administration"
+        ));
     }
 
-    private void registerCommand() {
-        LifecycleEventManager<org.bukkit.plugin.Plugin> manager = plugin.getLifecycleManager();
-
-        manager.registerEventHandler(LifecycleEvents.COMMANDS, event -> {
-            final CommandDispatcher<CommandSourceStack> dispatcher = event.registrar().getDispatcher();
-
-            // Register the main command with subcommands
-            final LiteralCommandNode<CommandSourceStack> catWalkCommand = Commands.literal("catwalk")
-                    .requires(source -> source.getSender().hasPermission("catwalk.admin"))
-                    .then(
-                            Commands.literal("reload")
-                                    .executes(this::executeReload)
-                    )
-                    .then(
-                            Commands.literal("info")
-                                    .executes(this::executeInfo)
-                    )
-                    .then(
-                            Commands.literal("status")
-                                    .executes(this::executeStatus)
-                    )
-                    .then(
-                            Commands.literal("endpoints")
-                                    .executes(this::executeEndpoints)
-                    )
-                    .then(
-                            Commands.literal("network")
-                                    .then(
-                                            Commands.literal("status")
-                                                    .executes(this::executeNetworkStatus)
-                                    )
-                                    .then(
-                                            Commands.literal("servers")
-                                                    .executes(this::executeNetworkServers)
-                                    )
-                    )
-                    .executes(this::executeDefault)
-                    .build();
-
-            dispatcher.getRoot().addChild(catWalkCommand);
-
-            plugin.getLogger().info("Registered Brigadier commands successfully");
-        });
-    }
-
-    // Default command execution (shows help)
-    private int executeDefault(CommandContext<CommandSourceStack> context) {
+    private int help(CommandContext<CommandSourceStack> context) {
         CommandSender sender = context.getSource().getSender();
-
-        sender.sendMessage(Component.text()
-                .append(Component.text("CatWalk Commands", NamedTextColor.BLUE, TextDecoration.BOLD))
-                .appendNewline()
-                .append(Component.text("• ", NamedTextColor.DARK_GRAY))
-                .append(Component.text("/catwalk reload", NamedTextColor.AQUA))
-                .append(Component.text(" - Reload the plugin", NamedTextColor.GRAY))
-                .appendNewline()
-                .append(Component.text("• ", NamedTextColor.DARK_GRAY))
-                .append(Component.text("/catwalk info", NamedTextColor.AQUA))
-                .append(Component.text(" - Show plugin information", NamedTextColor.GRAY))
-                .appendNewline()
-                .append(Component.text("• ", NamedTextColor.DARK_GRAY))
-                .append(Component.text("/catwalk status", NamedTextColor.AQUA))
-                .append(Component.text(" - Show server status", NamedTextColor.GRAY))
-                .appendNewline()
-                .append(Component.text("• ", NamedTextColor.DARK_GRAY))
-                .append(Component.text("/catwalk endpoints", NamedTextColor.AQUA))
-                .append(Component.text(" - List all registered API endpoints", NamedTextColor.GRAY))
-                .appendNewline()
-                .append(Component.text("• ", NamedTextColor.DARK_GRAY))
-                .append(Component.text("/catwalk network status", NamedTextColor.AQUA))
-                .append(Component.text(" - Show network status", NamedTextColor.GRAY))
-                .build()
-        );
-
+        sender.sendMessage(title("CatWalk Commands"));
+        helpLine(sender, "/catwalk reload", "Reload the configuration and web server");
+        helpLine(sender, "/catwalk info", "Show plugin information");
+        helpLine(sender, "/catwalk status", "Show web server status");
+        helpLine(sender, "/catwalk endpoints", "List all registered API endpoints");
+        helpLine(sender, "/catwalk network status", "Show network status");
+        helpLine(sender, "/catwalk network servers", "List online network servers");
         return Command.SINGLE_SUCCESS;
     }
 
-    // Reload command
-    private int executeReload(CommandContext<CommandSourceStack> context) {
+    private int reload(CommandContext<CommandSourceStack> context) {
         CommandSender sender = context.getSource().getSender();
-
-        sender.sendMessage(Component.text()
-                .append(Component.text("[", NamedTextColor.DARK_GRAY))
-                .append(Component.text("CatWalk", NamedTextColor.BLUE))
-                .append(Component.text("] ", NamedTextColor.DARK_GRAY))
-                .append(Component.text("Reloading plugin...", NamedTextColor.YELLOW))
-                .build()
-        );
-
         try {
             plugin.reload();
-
-            sender.sendMessage(Component.text()
-                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("CatWalk", NamedTextColor.BLUE))
-                    .append(Component.text("] ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("Plugin reloaded successfully!", NamedTextColor.GREEN))
-                    .build()
-            );
-
-        } catch (Exception e) {
-            sender.sendMessage(Component.text()
-                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("CatWalk", NamedTextColor.BLUE))
-                    .append(Component.text("] ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("Failed to reload: " + e.getMessage(), NamedTextColor.RED))
-                    .build()
-            );
+            sender.sendMessage(prefixed("Reloaded.", NamedTextColor.GREEN));
+        } catch (RuntimeException e) {
+            CatWalkLogger.error("Reload failed", e);
+            sender.sendMessage(prefixed("Reload failed: " + e.getMessage(), NamedTextColor.RED));
         }
-
         return Command.SINGLE_SUCCESS;
     }
 
-    // Info command
-    private int executeInfo(CommandContext<CommandSourceStack> context) {
+    private int info(CommandContext<CommandSourceStack> context) {
         CommandSender sender = context.getSource().getSender();
-
-        String version = plugin.getPluginMeta().getVersion();
-        String website = plugin.getPluginMeta().getWebsite();
-        java.util.List<String> authors = plugin.getPluginMeta().getAuthors();
-
-        sender.sendMessage(Component.text()
-                .append(Component.text("CatWalk Plugin Information", NamedTextColor.BLUE, TextDecoration.BOLD))
-                .appendNewline()
-                .append(Component.text("Version: ", NamedTextColor.BLUE))
-                .append(Component.text(version, NamedTextColor.AQUA))
-                .appendNewline()
-                .append(Component.text("Website: ", NamedTextColor.BLUE))
-                .append(Component.text(website != null ? website : "N/A", NamedTextColor.AQUA))
-                .appendNewline()
-                .append(Component.text("Authors: ", NamedTextColor.BLUE))
-                .append(Component.text(String.join(", ", authors), NamedTextColor.AQUA))
-                .appendNewline()
-                .append(Component.text("Mode: ", NamedTextColor.BLUE))
-                .append(Component.text(plugin.isHubMode() ? "Hub Gateway" : "Regular Server", NamedTextColor.AQUA))
-                .appendNewline()
-                .append(Component.text("Server ID: ", NamedTextColor.BLUE))
-                .append(Component.text(plugin.getServerId(), NamedTextColor.AQUA))
-                .build()
-        );
-
+        sender.sendMessage(title("CatWalk Plugin Information"));
+        field(sender, "Version", plugin.getPluginMeta().getVersion());
+        field(sender, "Authors", String.join(", ", plugin.getPluginMeta().getAuthors()));
+        field(sender, "Mode", plugin.getModeName());
+        field(sender, "Server ID", plugin.getServerId());
         return Command.SINGLE_SUCCESS;
     }
 
-    // Status command
-    private int executeStatus(CommandContext<CommandSourceStack> context) {
+    private int status(CommandContext<CommandSourceStack> context) {
         CommandSender sender = context.getSource().getSender();
-
-        // Gather server status information
-        boolean webServerRunning = plugin.getWebServer() != null;
-        int port = plugin.getConfig().getInt("port", 4567);
-        int onlinePlayers = plugin.getServer().getOnlinePlayers().size();
-        int maxPlayers = plugin.getServer().getMaxPlayers();
-
-        sender.sendMessage(Component.text()
-                .append(Component.text("CatWalk Server Status", NamedTextColor.BLUE, TextDecoration.BOLD))
-                .appendNewline()
-                .append(Component.text("Web Server: ", NamedTextColor.BLUE))
-                .append(Component.text(webServerRunning ? "Running" : "Stopped",
-                        webServerRunning ? NamedTextColor.GREEN : NamedTextColor.RED))
-                .appendNewline()
-                .append(Component.text("API Port: ", NamedTextColor.BLUE))
-                .append(Component.text(String.valueOf(port), NamedTextColor.AQUA))
-                .appendNewline()
-                .append(Component.text("Players: ", NamedTextColor.BLUE))
-                .append(Component.text(onlinePlayers + "/" + maxPlayers, NamedTextColor.AQUA))
-                .appendNewline()
-                .append(Component.text("Mode: ", NamedTextColor.BLUE))
-                .append(Component.text(plugin.isHubMode() ? "Hub Gateway" : "Backend Server", NamedTextColor.AQUA))
-                .build()
-        );
-
+        boolean running = plugin.getWebServer() != null;
+        sender.sendMessage(title("CatWalk Server Status"));
+        sender.sendMessage(Component.text("Web Server: ", NamedTextColor.BLUE)
+                .append(Component.text(running ? "Running" : "Stopped", running ? NamedTextColor.GREEN : NamedTextColor.RED)));
+        field(sender, "API Port", String.valueOf(plugin.getConfig().getInt("port")));
+        field(sender, "Players", plugin.getServer().getOnlinePlayers().size() + "/" + plugin.getServer().getMaxPlayers());
+        field(sender, "Mode", plugin.getModeName());
         return Command.SINGLE_SUCCESS;
     }
 
-    // Endpoints command - lists every registered route, including ones added by addons
-    private int executeEndpoints(CommandContext<CommandSourceStack> context) {
+    private int endpoints(CommandContext<CommandSourceStack> context) {
         CommandSender sender = context.getSource().getSender();
-
         WebServer webServer = plugin.getWebServer();
         if (webServer == null) {
-            sender.sendMessage(Component.text()
-                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("CatWalk", NamedTextColor.BLUE))
-                    .append(Component.text("] ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("Web server is not running", NamedTextColor.RED))
-                    .build()
-            );
+            sender.sendMessage(prefixed("Web server is not running", NamedTextColor.RED));
             return Command.SINGLE_SUCCESS;
         }
 
-        List<CustomOpenApiGenerator.RouteInfo> routes = new ArrayList<>(webServer.getOpenApiGenerator().getRegisteredRoutes());
-        routes.sort(Comparator.comparing(CustomOpenApiGenerator.RouteInfo::getPath)
-                .thenComparing(route -> route.getMethod().toString()));
+        List<RouteInfo> routes = webServer.getOpenApiGenerator().getRegisteredRoutes().stream()
+                .sorted(Comparator.comparing(RouteInfo::getPath).thenComparing(route -> route.getMethod().name()))
+                .toList();
+        sender.sendMessage(title("Registered CatWalk Endpoints ").append(Component.text("(" + routes.size() + ")", NamedTextColor.GRAY)));
 
-        sender.sendMessage(Component.text()
-                .append(Component.text("Registered CatWalk Endpoints ", NamedTextColor.BLUE, TextDecoration.BOLD))
-                .append(Component.text("(" + routes.size() + ")", NamedTextColor.GRAY))
-                .build()
-        );
-
-        for (CustomOpenApiGenerator.RouteInfo route : routes) {
-            // A route requires auth if the global key gate applies to its path, OR the
-            // addon that registered it (via @BridgeEventHandler) declared its own requirement -
-            // whichever check is stricter is the one that actually runs at request time.
-            boolean authRequired = webServer.requiresAuthentication(route.getPath())
-                    || Boolean.TRUE.equals(route.getRequiresAuth());
-
-            String origin = route.getPluginName() != null ? route.getPluginName() : switch (route.getRouteType()) {
-                case PROXY -> "proxy";
-                case ANNOTATED, STATIC -> "core";
-            };
-
-            sender.sendMessage(Component.text()
-                    .append(Component.text(String.format("%-6s ", route.getMethod()), NamedTextColor.AQUA))
+        for (RouteInfo route : routes) {
+            boolean authRequired = webServer.requiresAuthentication(route.getPath()) || Boolean.TRUE.equals(route.getRequiresAuth());
+            String origin = route.getPluginName() != null ? route.getPluginName() : "core";
+            sender.sendMessage(Component.text(String.format("%-6s ", route.getMethod().name()), NamedTextColor.AQUA)
                     .append(Component.text(route.getPath(), NamedTextColor.WHITE))
                     .append(Component.text("  [" + origin + "]", NamedTextColor.GRAY))
-                    .append(Component.text(authRequired ? "  (auth required)" : "  (public)",
-                            authRequired ? NamedTextColor.YELLOW : NamedTextColor.GREEN))
-                    .build()
-            );
+                    .append(Component.text(authRequired ? "  (auth required)" : "  (public)", authRequired ? NamedTextColor.YELLOW : NamedTextColor.GREEN)));
         }
-
         return Command.SINGLE_SUCCESS;
     }
 
-    // Network status command
-    private int executeNetworkStatus(CommandContext<CommandSourceStack> context) {
+    private int networkStatus(CommandContext<CommandSourceStack> context) {
         CommandSender sender = context.getSource().getSender();
-
-        if (!plugin.isHubMode()) {
-            sender.sendMessage(Component.text()
-                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("CatWalk", NamedTextColor.BLUE))
-                    .append(Component.text("] ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("Network commands are only available on hub servers", NamedTextColor.RED))
-                    .build()
-            );
+        if (plugin.getNetworkRegistry() == null) {
+            sender.sendMessage(prefixed("Network commands are not available in standalone mode", NamedTextColor.RED));
             return Command.SINGLE_SUCCESS;
         }
-
-        // Show network status (if hub gateway is implemented)
-        sender.sendMessage(Component.text()
-                .append(Component.text("Network Status", NamedTextColor.BLUE, TextDecoration.BOLD))
-                .appendNewline()
-                .append(Component.text("Hub Server: ", NamedTextColor.BLUE))
-                .append(Component.text(plugin.getServerId(), NamedTextColor.AQUA))
-                .appendNewline()
-                .append(Component.text("Network Mode: ", NamedTextColor.BLUE))
-                .append(Component.text("Active", NamedTextColor.GREEN))
-                .appendNewline()
-                .append(Component.text("Use '/catwalk network servers' for detailed server list", NamedTextColor.GRAY))
-                .build()
-        );
-
+        plugin.getNetworkRegistry().getAllServers().whenComplete((servers, error) -> {
+            if (error != null) {
+                sender.sendMessage(prefixed("Failed to read network status: " + error.getMessage(), NamedTextColor.RED));
+                return;
+            }
+            sender.sendMessage(title("Network Status"));
+            field(sender, "This server", plugin.getServerId() + " (" + plugin.getModeName() + ")");
+            field(sender, "Online servers", String.valueOf(servers.size()));
+            field(sender, "Online players", String.valueOf(servers.stream().mapToInt(NetworkServer::getOnlinePlayers).sum()));
+        });
         return Command.SINGLE_SUCCESS;
     }
 
-    // Network servers command
-    private int executeNetworkServers(CommandContext<CommandSourceStack> context) {
+    private int networkServers(CommandContext<CommandSourceStack> context) {
         CommandSender sender = context.getSource().getSender();
-
-        if (!plugin.isHubMode()) {
-            sender.sendMessage(Component.text()
-                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("CatWalk", NamedTextColor.BLUE))
-                    .append(Component.text("] ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("Network commands are only available on hub servers", NamedTextColor.RED))
-                    .build()
-            );
+        if (plugin.getNetworkRegistry() == null) {
+            sender.sendMessage(prefixed("Network commands are not available in standalone mode", NamedTextColor.RED));
             return Command.SINGLE_SUCCESS;
         }
-
-        // Show network servers (when hub gateway is implemented)
-        sender.sendMessage(Component.text()
-                .append(Component.text("Network Servers", NamedTextColor.BLUE, TextDecoration.BOLD))
-                .appendNewline()
-                .append(Component.text("• ", NamedTextColor.DARK_GRAY))
-                .append(Component.text(plugin.getServerId() + " (Hub)", NamedTextColor.GREEN))
-                .appendNewline()
-                .append(Component.text("Use the web API at /v1/network/servers for detailed information", NamedTextColor.GRAY))
-                .build()
-        );
-
+        plugin.getNetworkRegistry().getAllServers().whenComplete((servers, error) -> {
+            if (error != null) {
+                sender.sendMessage(prefixed("Failed to read network servers: " + error.getMessage(), NamedTextColor.RED));
+                return;
+            }
+            sender.sendMessage(title("Network Servers ").append(Component.text("(" + servers.size() + ")", NamedTextColor.GRAY)));
+            for (NetworkServer server : servers) {
+                sender.sendMessage(Component.text("- ", NamedTextColor.DARK_GRAY)
+                        .append(Component.text(server.getServerId(), NamedTextColor.GREEN))
+                        .append(Component.text(" " + server.getServerType().name().toLowerCase(), NamedTextColor.GRAY))
+                        .append(Component.text("  " + server.getOnlinePlayers() + "/" + server.getMaxPlayers() + " players", NamedTextColor.AQUA)));
+            }
+        });
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static Component title(String text) {
+        return Component.text(text, NamedTextColor.BLUE, TextDecoration.BOLD);
+    }
+
+    private static Component prefixed(String message, NamedTextColor color) {
+        return Component.text("[", NamedTextColor.DARK_GRAY)
+                .append(Component.text("CatWalk", NamedTextColor.BLUE))
+                .append(Component.text("] ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(message, color));
+    }
+
+    private static void field(CommandSender sender, String name, String value) {
+        sender.sendMessage(Component.text(name + ": ", NamedTextColor.BLUE).append(Component.text(value, NamedTextColor.AQUA)));
+    }
+
+    private static void helpLine(CommandSender sender, String command, String description) {
+        sender.sendMessage(Component.text("- ", NamedTextColor.DARK_GRAY)
+                .append(Component.text(command, NamedTextColor.AQUA))
+                .append(Component.text(" - " + description, NamedTextColor.GRAY)));
     }
 }

@@ -1,170 +1,52 @@
-# =================================================================
-# CatWalk Hub Gateway Configuration
-# =================================================================
-
-# =================================================================
-# CORE WEB SERVER SETTINGS
-# =================================================================
-
-# Port for the web server
 port: 4567
-
-# Server URL for OpenAPI specification and CORS
-# Use the actual domain/URL where your server is accessible
-# Examples: "http://localhost:4567", "https://catwalk.uaproject.net"
+# Public URL of this server, used in the OpenAPI spec
 server-url: "http://localhost:4567"
-
-# Enable debug logging
 debug: false
 
-# Enable authentication for API endpoints
 useKeyAuth: true
-
-# API authentication key (CHANGE THIS!)
+# Generated on first start when left as is; every server of a network must share it
 key: 'change_me_to_secure_random_string'
+# Extra keys that may only call endpoints whose @BridgeEventHandler scopes they all hold
+scoped-keys: {}
 
-# Normalize chat messages
-normalizeMessages: true
-
-# =================================================================
-# HUB GATEWAY SETTINGS
-# =================================================================
-
+# true = hub gateway, false = backend server, "standalone" = no database
 hub:
-  # Server mode configuration:
-  # - true: Hub Gateway mode (routes requests through database to other servers)
-  # - false: Backend Server mode (processes requests from database)
-  # - "standalone": Standalone mode (no database, direct local routing)
   enabled: false
-
-  # Unique identifier for this server in the network
-  # Examples: "lobby", "survival", "creative", "hub", "beta", "vanilla", "heavy"
-  # In standalone mode, this is used for identification only
   server-id: "unknown"
 
-# =================================================================
-# DATABASE SETTINGS (REQUIRED for hub and backend modes)
-# =================================================================
-
 database:
-  # MariaDB/MySQL database connection settings
   host: "localhost"
   port: 3306
   name: "catwalk_network"
   username: "catwalk"
   password: "your_secure_password"
-
-  # Connection pool settings
   pool-size: 10
   min-idle: 2
-
-  # Connection timeouts (milliseconds)
-  connection-timeout: 30000  # 30 seconds
-  idle-timeout: 600000       # 10 minutes
-  max-lifetime: 1800000      # 30 minutes
-
-# =================================================================
-# NETWORK SETTINGS
-# =================================================================
-
-network:
-  # Request processing settings
-  request-processing:
-    # How often to check for new requests (seconds)
-    poll-interval: 2
-
-    # Default timeout for proxy requests (seconds)
-    default-timeout: 30
-
-    # Maximum number of retries for failed requests
-    max-retries: 3
-
-    # Maximum concurrent requests per server
-    max-concurrent: 10
-
-  # Cache settings for performance
-  cache:
-    # How often to refresh network topology cache (seconds)
-    refresh-interval: 120
-
-    # Enable local caching of server/addon data
-    enabled: true
-
-# =================================================================
-# TLS/SSL SETTINGS
-# =================================================================
+  connection-timeout: 30000
+  idle-timeout: 600000
+  max-lifetime: 1800000
 
 tls:
-  # Enable TLS/SSL encryption
   enabled: false
-
-  # Path to keystore file (relative to plugin folder)
   keystore: keystore.jks
-
-  # Keystore password
   keystorePassword: ""
-
-  # Enforce Server Name Indication (SNI)
   sni: false
 
-# =================================================================
-# CORS SETTINGS
-# =================================================================
-
-# Allowed CORS origins
-# Use ["*"] to allow all origins (not recommended for production)
 corsOrigins:
   - "*"
-  # Examples for production:
-  # - "https://yourdomain.com"
-  # - "https://dashboard.yourserver.net"
-  # - "http://localhost:3000"
 
-# =================================================================
-# REQUEST LOGGING
-# =================================================================
+# Only requests from these addresses may set X-Forwarded-For
+trusted-proxies: []
 
 request-logging:
-  # Log every HTTP request (who, which endpoint, which authorization, status, duration)
-  # to plugins/CatWalk/logs/requests.log, separate from the server console log.
-  # Rotates at 10MB, keeps 5 files.
   enabled: true
 
-# =================================================================
-# WEBSOCKET SETTINGS
-# =================================================================
-
-# Number of console log lines to buffer for websocket connections
-# Set to 0 to disable console streaming
-websocketConsoleBuffer: 1000
-
-# =================================================================
-# API DOCUMENTATION
-# =================================================================
-
-# Disable Swagger UI (set to true to hide API documentation)
 disable-swagger: false
 
-# =================================================================
-# SECURITY SETTINGS
-# =================================================================
+blocked-paths: []
 
-# Paths that should be blocked from API access
-# Use this to disable specific endpoints
-blocked-paths: [ ]
-  # Examples:
-# - "/v1/server/stop"
-# - "/v1/players/*/kick"
-# - "/v1/console/*"
-
-# Paths that don't require authentication (whitelist)
-# These paths will be accessible without API key
 whitelisted-paths:
-  - "/swagger*"
-  - "/redoc*"
+  - "/swagger"
+  - "/swagger.html"
+  - "/redoc"
   - "/openapi.json"
-  - "/v1/network/*"  # Network endpoints are public for hub discovery
-  - "/health"
-  # Examples:
-  # - "/v1/server/status"
-  # - "/v1/stats/summary"

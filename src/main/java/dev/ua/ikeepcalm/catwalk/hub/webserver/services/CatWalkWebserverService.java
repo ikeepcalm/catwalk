@@ -1,120 +1,136 @@
 package dev.ua.ikeepcalm.catwalk.hub.webserver.services;
 
+import dev.ua.ikeepcalm.catwalk.CatWalkMain;
+import dev.ua.ikeepcalm.catwalk.bridge.BridgeEventHandlerProcessor;
+import dev.ua.ikeepcalm.catwalk.common.utils.CatWalkLogger;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServer;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.Handler;
+import io.javalin.http.HttpStatus;
 import io.javalin.websocket.WsConfig;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-/**
- * Enhanced API for the CatWalk Webserver.
- * Provides methods for registering endpoints and handling responses.
- */
-public interface CatWalkWebserverService {
+public class CatWalkWebserverService {
 
-    /**
-     * Get the Javalin Webserver Instance.
-     * Use with caution, as this gives full access to the Webserver and might break CatWalks functionality.
-     *
-     * @return the Javalin Webserver Instance
-     */
-    Javalin getWebserver();
+    private static final Set<String> GENERIC_PACKAGE_PARTS = Set.of("catwalk", "bridge", "api", "handlers");
 
-    /**
-     * Adds a GET Request Handler for the specified Path to the Webserver.
-     *
-     * @param path The Path to handle
-     * @param handler The Handler
-     */
-    void get(String path, Handler handler);
+    private final CatWalkMain plugin;
+    private final BridgeEventHandlerProcessor bridgeProcessor;
+    // Addons register once at their onEnable, so registrations are replayed onto the new WebServer after /catwalk reload
+    private final List<Runnable> registrations = new CopyOnWriteArrayList<>();
 
-    /**
-     * Adds a POST Request Handler for the specified Path to the Webserver.
-     *
-     * @param path The Path to handle
-     * @param handler The Handler
-     */
-    void post(String path, Handler handler);
+    public CatWalkWebserverService(CatWalkMain plugin) {
+        this.plugin = plugin;
+        this.bridgeProcessor = new BridgeEventHandlerProcessor(plugin, plugin::getWebServer);
+    }
 
-    /**
-     * Adds a PUT Request Handler for the specified Path to the Webserver.
-     *
-     * @param path The Path to handle
-     * @param handler The Handler
-     */
-    void put(String path, Handler handler);
+    public Javalin getWebserver() {
+        return webServer().getJavalin();
+    }
 
-    /**
-     * Adds a DELETE Request Handler for the specified Path to the Webserver.
-     *
-     * @param path The Path to handle
-     * @param handler The Handler
-     */
-    void delete(String path, Handler handler);
+    public String getAuthKey() {
+        return webServer().getAuthKey();
+    }
 
-    /**
-     * Adds a WebSocket Handler on the specified Path to the Webserver.
-     *
-     * @param path The Path to handle
-     * @param socket The Websocket Configuration
-     */
-    void websocket(String path, Consumer<WsConfig> socket);
+    public void get(String path, Handler handler) {
+        register(() -> webServer().get(path, handler));
+    }
 
-    /**
-     * Registers all handler methods with OpenApi annotations in the given object.
-     * This automatically maps methods to HTTP endpoints.
-     *
-     * @param handlerInstance The object containing handler methods
-     */
-    void registerHandlers(Object handlerInstance);
+    public void post(String path, Handler handler) {
+        register(() -> webServer().post(path, handler));
+    }
 
-    /**
-     * Registers a GET endpoint that returns the result of a function.
-     * This method handles error responses and appropriate status codes.
-     *
-     * @param path The path to handle
-     * @param responseFunction A function that processes the request and returns a response
-     * @param <T> The type of the response
-     */
-    <T> void getWithResponse(String path, Function<Context, T> responseFunction);
+    public void put(String path, Handler handler) {
+        register(() -> webServer().put(path, handler));
+    }
 
-    /**
-     * Registers a POST endpoint that returns the result of a function.
-     * This method handles error responses and appropriate status codes.
-     *
-     * @param path The path to handle
-     * @param responseFunction A function that processes the request and returns a response
-     * @param <T> The type of the response
-     */
-    <T> void postWithResponse(String path, Function<Context, T> responseFunction);
+    public void delete(String path, Handler handler) {
+        register(() -> webServer().delete(path, handler));
+    }
 
-    /**
-     * Registers a PUT endpoint that returns the result of a function.
-     * This method handles error responses and appropriate status codes.
-     *
-     * @param path The path to handle
-     * @param responseFunction A function that processes the request and returns a response
-     * @param <T> The type of the response
-     */
-    <T> void putWithResponse(String path, Function<Context, T> responseFunction);
+    public void websocket(String path, Consumer<WsConfig> socket) {
+        register(() -> webServer().ws(path, socket));
+    }
 
-    /**
-     * Registers a DELETE endpoint that returns the result of a function.
-     * This method handles error responses and appropriate status codes.
-     *
-     * @param path The path to handle
-     * @param responseFunction A function that processes the request and returns a response
-     * @param <T> The type of the response
-     */
-    <T> void deleteWithResponse(String path, Function<Context, T> responseFunction);
+    public <T> void getWithResponse(String path, Function<Context, T> responseFunction) {
+        get(path, ctx -> respond(ctx, responseFunction));
+    }
 
-    /**
-     * Get the current Bearer authorization key used by the webserver.
-     * This can be used by addons to make authenticated requests to other CatWalk instances.
-     *
-     * @return the current Bearer authorization key
-     */
-    String getAuthKey();
+    public <T> void postWithResponse(String path, Function<Context, T> responseFunction) {
+        post(path, ctx -> respond(ctx, responseFunction));
+    }
+
+    public <T> void putWithResponse(String path, Function<Context, T> responseFunction) {
+        put(path, ctx -> respond(ctx, responseFunction));
+    }
+
+    public <T> void deleteWithResponse(String path, Function<Context, T> responseFunction) {
+        delete(path, ctx -> respond(ctx, responseFunction));
+    }
+
+    public void registerHandlers(Object handlerInstance) {
+        register(() -> registerHandlersNow(handlerInstance));
+    }
+
+    public void replayRegistrations() {
+        registrations.forEach(Runnable::run);
+    }
+
+    private void registerHandlersNow(Object handlerInstance) {
+        String pluginName = pluginName(handlerInstance);
+        if (!plugin.isHubMode()) {
+            bridgeProcessor.registerHandler(handlerInstance, pluginName);
+        }
+        if (!plugin.isStandaloneMode()) {
+            plugin.getNetworkRegistry().registerAddonFromHandler(plugin.getServerId(), pluginName, handlerInstance);
+        }
+    }
+
+    private void register(Runnable registration) {
+        registration.run();
+        registrations.add(registration);
+    }
+
+    private WebServer webServer() {
+        return plugin.getWebServer();
+    }
+
+    private <T> void respond(Context ctx, Function<Context, T> responseFunction) {
+        T result;
+        try {
+            result = responseFunction.apply(ctx);
+        } catch (RuntimeException e) {
+            CatWalkLogger.error("Handler for %s failed", e, ctx.path());
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", "Internal server error"));
+            return;
+        }
+
+        switch (result) {
+            case null -> ctx.status(HttpStatus.NO_CONTENT);
+            case String text -> ctx.result(text);
+            case byte[] bytes -> ctx.result(bytes);
+            default -> ctx.json(result);
+        }
+    }
+
+    private String pluginName(Object handlerInstance) {
+        String className = handlerInstance.getClass().getSimpleName();
+        if (className.endsWith("Catwalk")) {
+            return className.substring(0, className.length() - "Catwalk".length()).toLowerCase();
+        }
+        String[] packageParts = handlerInstance.getClass().getPackageName().split("\\.");
+        for (int i = packageParts.length - 1; i >= 0; i--) {
+            if (!GENERIC_PACKAGE_PARTS.contains(packageParts[i])) {
+                return packageParts[i].toLowerCase();
+            }
+        }
+        return className.toLowerCase();
+    }
 }

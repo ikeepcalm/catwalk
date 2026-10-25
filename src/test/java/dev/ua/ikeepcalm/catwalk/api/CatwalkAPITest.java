@@ -21,14 +21,14 @@ class CatwalkAPITest {
     @BeforeEach
     void setUp() {
         // Set a test Bearer token
-        CatwalkAPI.setBearerToken(TEST_BEARER_TOKEN);
+        CatwalkAPI.setBearerToken(TEST_URL, TEST_BEARER_TOKEN);
     }
     
     @Test
     void testSetAndGetBearerToken() {
         String testToken = "my-test-token";
-        CatwalkAPI.setBearerToken(testToken);
-        assertEquals(testToken, CatwalkAPI.getBearerToken());
+        CatwalkAPI.setBearerToken(TEST_URL, testToken);
+        assertEquals(testToken, CatwalkAPI.getBearerToken(TEST_URL + "/anything"));
     }
     
     @Test
@@ -184,7 +184,7 @@ class CatwalkAPITest {
     @Test
     void testWithoutBearerToken() {
         // Test without Bearer token
-        CatwalkAPI.setBearerToken(null);
+        CatwalkAPI.setBearerToken(TEST_URL, null);
         
         ApiResponse response = CatwalkAPI.sendGet(TEST_URL + "/get");
         
@@ -196,6 +196,18 @@ class CatwalkAPITest {
         assertFalse(response.getBody().contains("Authorization"));
         
         // Reset the token for other tests
-        CatwalkAPI.setBearerToken(TEST_BEARER_TOKEN);
+        CatwalkAPI.setBearerToken(TEST_URL, TEST_BEARER_TOKEN);
+    }
+
+    @Test
+    void testTokenIsNotSentToOtherOrigins() {
+        CatwalkAPI.setBearerToken(TEST_URL, null);
+        CatwalkAPI.setBearerToken("https://catwalk.example.invalid", "secret-for-another-host");
+
+        ApiResponse response = CatwalkAPI.sendGet(TEST_URL + "/get");
+
+        assertTrue(response.isSuccess());
+        assertFalse(response.getBody().contains("secret-for-another-host"));
+        CatwalkAPI.setBearerToken(TEST_URL, TEST_BEARER_TOKEN);
     }
 }

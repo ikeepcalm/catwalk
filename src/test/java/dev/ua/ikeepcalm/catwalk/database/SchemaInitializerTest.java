@@ -72,7 +72,7 @@ class SchemaInitializerTest {
         assertTrue(schemaInitializer.isSchemaInitialized());
         
         // Reinitialize should not fail
-        assertDoesNotThrow(() -> schemaInitializer.reinitializeSchema());
+        assertDoesNotThrow(() -> schemaInitializer.initializeSchema());
         assertTrue(schemaInitializer.isSchemaInitialized());
     }
     

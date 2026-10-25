@@ -1,267 +1,142 @@
 package dev.ua.ikeepcalm.catwalk.api;
 
 import dev.ua.ikeepcalm.catwalk.common.utils.CatWalkLogger;
-import lombok.Getter;
-import lombok.Setter;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * API utility class for making HTTP requests with Bearer authorization
- * from CatWalk addons to external endpoints.
- */
 public class CatwalkAPI {
-    
-    private static final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
-            .build();
 
-    /**
-     * -- SETTER --
-     *  Set the Bearer token to be used for all requests.
-     *  This should typically be called once during addon initialization.
-     *
-     *
-     * -- GETTER --
-     *  Get the currently configured Bearer token.
-     *
-     */
-    @Getter
-    @Setter
-    private static String bearerToken;
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
 
-    /**
-     * Send a GET request to the specified URL.
-     * 
-     * @param url the target URL
-     * @return ApiResponse containing the response details
-     */
-    public static ApiResponse sendGet(String url) {
-        return sendGet(url, Map.of());
+    private static final Map<String, String> TOKENS_BY_ORIGIN = new ConcurrentHashMap<>();
+
+    public static void setBearerToken(String baseUrl, String token) {
+        String origin = origin(URI.create(baseUrl));
+        if (token == null || token.isEmpty()) {
+            TOKENS_BY_ORIGIN.remove(origin);
+        } else {
+            TOKENS_BY_ORIGIN.put(origin, token);
+        }
     }
-    
-    /**
-     * Send a GET request to the specified URL with custom headers.
-     * 
-     * @param url the target URL
-     * @param headers additional headers to include
-     * @return ApiResponse containing the response details
-     */
+
+    public static String getBearerToken(String baseUrl) {
+        return TOKENS_BY_ORIGIN.get(origin(URI.create(baseUrl)));
+    }
+
+    private static String origin(URI uri) {
+        if (uri.getScheme() == null || uri.getHost() == null) {
+            throw new IllegalArgumentException("Not an absolute URL: " + uri);
+        }
+        int port = uri.getPort() != -1 ? uri.getPort() : uri.getScheme().equalsIgnoreCase("https") ? 443 : 80;
+        return uri.getScheme().toLowerCase() + "://" + uri.getHost().toLowerCase() + ":" + port;
+    }
+
+    public static ApiResponse sendGet(String url) {
+        return sendRequest(url, "GET", null, Map.of());
+    }
+
     public static ApiResponse sendGet(String url, Map<String, String> headers) {
         return sendRequest(url, "GET", null, headers);
     }
-    
-    /**
-     * Send a POST request to the specified URL with JSON body.
-     * 
-     * @param url the target URL
-     * @param body the JSON body content
-     * @return ApiResponse containing the response details
-     */
+
     public static ApiResponse sendPost(String url, String body) {
-        return sendPost(url, body, Map.of());
+        return sendRequest(url, "POST", body, Map.of());
     }
-    
-    /**
-     * Send a POST request to the specified URL with JSON body and custom headers.
-     * 
-     * @param url the target URL
-     * @param body the JSON body content
-     * @param headers additional headers to include
-     * @return ApiResponse containing the response details
-     */
+
     public static ApiResponse sendPost(String url, String body, Map<String, String> headers) {
         return sendRequest(url, "POST", body, headers);
     }
-    
-    /**
-     * Send a PUT request to the specified URL with JSON body.
-     * 
-     * @param url the target URL
-     * @param body the JSON body content
-     * @return ApiResponse containing the response details
-     */
+
     public static ApiResponse sendPut(String url, String body) {
-        return sendPut(url, body, Map.of());
+        return sendRequest(url, "PUT", body, Map.of());
     }
-    
-    /**
-     * Send a PUT request to the specified URL with JSON body and custom headers.
-     * 
-     * @param url the target URL
-     * @param body the JSON body content
-     * @param headers additional headers to include
-     * @return ApiResponse containing the response details
-     */
+
     public static ApiResponse sendPut(String url, String body, Map<String, String> headers) {
         return sendRequest(url, "PUT", body, headers);
     }
-    
-    /**
-     * Send a DELETE request to the specified URL.
-     * 
-     * @param url the target URL
-     * @return ApiResponse containing the response details
-     */
+
     public static ApiResponse sendDelete(String url) {
-        return sendDelete(url, Map.of());
+        return sendRequest(url, "DELETE", null, Map.of());
     }
-    
-    /**
-     * Send a DELETE request to the specified URL with custom headers.
-     * 
-     * @param url the target URL
-     * @param headers additional headers to include
-     * @return ApiResponse containing the response details
-     */
+
     public static ApiResponse sendDelete(String url, Map<String, String> headers) {
         return sendRequest(url, "DELETE", null, headers);
     }
-    
-    /**
-     * Send an HTTP request with the specified method, body, and headers.
-     * 
-     * @param url the target URL
-     * @param method HTTP method (GET, POST, PUT, DELETE, etc.)
-     * @param body request body (can be null for GET/DELETE)
-     * @param headers additional headers to include
-     * @return ApiResponse containing the response details
-     */
-    public static ApiResponse sendRequest(String url, String method, String body, Map<String, String> headers) {
-        try {
-            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                    .uri(new URI(url))
-                    .timeout(Duration.ofSeconds(60));
-            
-            // Add Bearer token if available
-            if (bearerToken != null && !bearerToken.isEmpty()) {
-                requestBuilder.header("Authorization", "Bearer " + bearerToken);
-            }
-            
-            // Add custom headers
-            if (headers != null) {
-                for (Map.Entry<String, String> header : headers.entrySet()) {
-                    requestBuilder.header(header.getKey(), header.getValue());
-                }
-            }
-            
-            // Set content type for requests with body
-            if (body != null && !body.isEmpty()) {
-                requestBuilder.header("Content-Type", "application/json");
-                requestBuilder.method(method, HttpRequest.BodyPublishers.ofString(body));
-            } else {
-                requestBuilder.method(method, HttpRequest.BodyPublishers.noBody());
-            }
-            
-            HttpRequest request = requestBuilder.build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            
-            CatWalkLogger.debug("API Request: %s %s -> %d", method, url, response.statusCode());
-            
-            return new ApiResponse(
-                response.statusCode(),
-                response.body(),
-                response.headers().map()
-            );
-            
-        } catch (URISyntaxException e) {
-            CatWalkLogger.error("Invalid URL: %s", e, url);
-            return new ApiResponse(-1, "Invalid URL: " + e.getMessage(), Map.of());
-        } catch (IOException e) {
-            CatWalkLogger.error("Network error for %s %s: %s", e, method, url, e.getMessage());
-            return new ApiResponse(-1, "Network error: " + e.getMessage(), Map.of());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            CatWalkLogger.error("Request interrupted for %s %s: %s", e, method, url, e.getMessage());
-            return new ApiResponse(-1, "Request interrupted: " + e.getMessage(), Map.of());
-        }
-    }
-    
-    /**
-     * Send an asynchronous HTTP request.
-     * 
-     * @param url the target URL
-     * @param method HTTP method (GET, POST, PUT, DELETE, etc.)
-     * @param body request body (can be null for GET/DELETE)
-     * @param headers additional headers to include
-     * @return CompletableFuture containing the ApiResponse
-     */
-    public static CompletableFuture<ApiResponse> sendRequestAsync(String url, String method, String body, Map<String, String> headers) {
-        try {
-            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                    .uri(new URI(url))
-                    .timeout(Duration.ofSeconds(60));
-            
-            // Add Bearer token if available
-            if (bearerToken != null && !bearerToken.isEmpty()) {
-                requestBuilder.header("Authorization", "Bearer " + bearerToken);
-            }
-            
-            // Add custom headers
-            if (headers != null) {
-                for (Map.Entry<String, String> header : headers.entrySet()) {
-                    requestBuilder.header(header.getKey(), header.getValue());
-                }
-            }
-            
-            // Set content type for requests with body
-            if (body != null && !body.isEmpty()) {
-                requestBuilder.header("Content-Type", "application/json");
-                requestBuilder.method(method, HttpRequest.BodyPublishers.ofString(body));
-            } else {
-                requestBuilder.method(method, HttpRequest.BodyPublishers.noBody());
-            }
-            
-            HttpRequest request = requestBuilder.build();
-            
-            return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenApply(response -> {
-                        CatWalkLogger.debug("Async API Request: %s %s -> %d", method, url, response.statusCode());
-                        return new ApiResponse(
-                                response.statusCode(),
-                                response.body(),
-                                response.headers().map()
-                        );
-                    })
-                    .exceptionally(throwable -> {
-                        CatWalkLogger.error("Async request failed for %s %s: %s", throwable, method, url, throwable.getMessage());
-                        return new ApiResponse(-1, "Request failed: " + throwable.getMessage(), Map.of());
-                    });
-            
-        } catch (URISyntaxException e) {
-            CatWalkLogger.error("Invalid URL: %s", e, url);
-            return CompletableFuture.completedFuture(
-                    new ApiResponse(-1, "Invalid URL: " + e.getMessage(), Map.of())
-            );
-        }
-    }
-    
-    /**
-     * Send an asynchronous GET request.
-     * 
-     * @param url the target URL
-     * @return CompletableFuture containing the ApiResponse
-     */
+
     public static CompletableFuture<ApiResponse> sendGetAsync(String url) {
         return sendRequestAsync(url, "GET", null, Map.of());
     }
-    
-    /**
-     * Send an asynchronous POST request.
-     * 
-     * @param url the target URL
-     * @param body the JSON body content
-     * @return CompletableFuture containing the ApiResponse
-     */
+
     public static CompletableFuture<ApiResponse> sendPostAsync(String url, String body) {
         return sendRequestAsync(url, "POST", body, Map.of());
+    }
+
+    public static ApiResponse sendRequest(String url, String method, String body, Map<String, String> headers) {
+        try {
+            HttpResponse<String> response = HTTP_CLIENT.send(buildRequest(url, method, body, headers), HttpResponse.BodyHandlers.ofString());
+            CatWalkLogger.debug("API request %s %s -> %d", method, url, response.statusCode());
+            return toApiResponse(response);
+        } catch (IllegalArgumentException e) {
+            return failure("Invalid URL: " + e.getMessage());
+        } catch (IOException e) {
+            CatWalkLogger.error("Network error for %s %s", e, method, url);
+            return failure("Network error: " + e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return failure("Request interrupted: " + e.getMessage());
+        }
+    }
+
+    public static CompletableFuture<ApiResponse> sendRequestAsync(String url, String method, String body, Map<String, String> headers) {
+        HttpRequest request;
+        try {
+            request = buildRequest(url, method, body, headers);
+        } catch (IllegalArgumentException e) {
+            return CompletableFuture.completedFuture(failure("Invalid URL: " + e.getMessage()));
+        }
+        return HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(CatwalkAPI::toApiResponse)
+                .exceptionally(error -> {
+                    CatWalkLogger.error("Async request %s %s failed", error, method, url);
+                    return failure("Request failed: " + error.getMessage());
+                });
+    }
+
+    private static HttpRequest buildRequest(String url, String method, String body, Map<String, String> headers) {
+        URI uri = URI.create(url);
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(uri)
+                .timeout(Duration.ofSeconds(60));
+
+        if (headers != null) {
+            headers.forEach(builder::header);
+        }
+        String token = TOKENS_BY_ORIGIN.get(origin(uri));
+        if (token != null) {
+            builder.setHeader("Authorization", "Bearer " + token);
+        }
+
+        if (body == null || body.isEmpty()) {
+            return builder.method(method, HttpRequest.BodyPublishers.noBody()).build();
+        }
+        return builder.header("Content-Type", "application/json")
+                .method(method, HttpRequest.BodyPublishers.ofString(body))
+                .build();
+    }
+
+    private static ApiResponse toApiResponse(HttpResponse<String> response) {
+        return new ApiResponse(response.statusCode(), response.body(), response.headers().map());
+    }
+
+    private static ApiResponse failure(String message) {
+        return new ApiResponse(-1, message, Map.of());
     }
 }

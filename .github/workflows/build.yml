@@ -14,12 +14,12 @@ jobs:
     outputs:
       release_id: ${{ steps.release.outputs.id }}
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up JDK 21
-      uses: actions/setup-java@v3
+    - uses: actions/checkout@v5
+    - name: Set up JDK 25
+      uses: actions/setup-java@v5
       with:
         distribution: temurin
-        java-version: 21
+        java-version: 25
         cache: gradle
     - name: Build with Gradle
       run: ./gradlew clean build shadowJar --no-daemon
@@ -27,7 +27,7 @@ jobs:
       run: rm -f build/libs/*-plain.jar
     - name: Release
       id: release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
         name: "CatWalk ${{ github.ref_name }}"

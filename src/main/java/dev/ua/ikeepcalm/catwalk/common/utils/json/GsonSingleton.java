@@ -4,16 +4,9 @@ import com.google.gson.Gson;
 
 public class GsonSingleton {
 
-    private static Gson instance;
-
-    private GsonSingleton() {
-    }
+    private static final Gson INSTANCE = new Gson();
 
     public static Gson getInstance() {
-        if (instance == null) {
-            instance = new Gson();
-        }
-
-        return instance;
+        return INSTANCE;
     }
 }

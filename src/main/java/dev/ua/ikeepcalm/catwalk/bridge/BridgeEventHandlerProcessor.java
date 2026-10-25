@@ -1,426 +1,212 @@
 package dev.ua.ikeepcalm.catwalk.bridge;
 
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.ua.ikeepcalm.catwalk.CatWalkMain;
 import dev.ua.ikeepcalm.catwalk.bridge.annotations.BridgeEventHandler;
 import dev.ua.ikeepcalm.catwalk.bridge.annotations.BridgePathParam;
 import dev.ua.ikeepcalm.catwalk.bridge.annotations.BridgeQueryParam;
 import dev.ua.ikeepcalm.catwalk.bridge.annotations.BridgeRequestBody;
-import dev.ua.ikeepcalm.catwalk.common.utils.json.GsonSingleton;
+import dev.ua.ikeepcalm.catwalk.bridge.source.BridgeApiResponse;
+import dev.ua.ikeepcalm.catwalk.common.database.model.EndpointDefinition;
 import dev.ua.ikeepcalm.catwalk.common.utils.CatWalkLogger;
+import dev.ua.ikeepcalm.catwalk.common.utils.OpenApiSchemas;
+import dev.ua.ikeepcalm.catwalk.common.utils.json.GsonSingleton;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.CustomOpenApiGenerator.RouteType;
+import dev.ua.ikeepcalm.catwalk.hub.webserver.RouteAccess;
 import dev.ua.ikeepcalm.catwalk.hub.webserver.WebServer;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import io.javalin.openapi.HttpMethod;
 import io.javalin.openapi.OpenApi;
+import org.bukkit.plugin.Plugin;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.function.Supplier;
 
-/**
- * Enhanced processor for handling bridge events from third-party plugins.
- * Supports all HTTP methods, return values, error handling, authentication,
- * and the new BridgeQueryParam and BridgeRequestBody annotations.
- */
 public class BridgeEventHandlerProcessor {
 
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Plugin plugin;
+    private final Supplier<WebServer> webServer;
 
-    public BridgeEventHandlerProcessor() {
-        this.objectMapper = new ObjectMapper();
+    public BridgeEventHandlerProcessor(Plugin plugin, Supplier<WebServer> webServer) {
+        this.plugin = plugin;
+        this.webServer = webServer;
     }
 
-    /**
-     * Registers all methods in the handler instance that have the OpenApi annotation.
-     */
-    public void registerHandler(Object handlerInstance, String plugin) {
-        Class<?> clazz = handlerInstance.getClass();
-        WebServer webServer = CatWalkMain.instance.getWebServer();
-
-        CatWalkLogger.debug("Registering handler for plugin: %s", plugin);
-
-        int registeredEndpoints = 0;
-
-        for (Method method : clazz.getDeclaredMethods()) {
-            OpenApi openApiAnnotation = method.getAnnotation(OpenApi.class);
-            if (openApiAnnotation == null) continue;
-
-            BridgeEventHandler bridgeAnnotation = method.getAnnotation(BridgeEventHandler.class);
-            boolean requiresAuth = bridgeAnnotation == null || bridgeAnnotation.requiresAuth();
-
-            CatWalkLogger.debug("Registering endpoint: %s %s",
-                    openApiAnnotation.path(),
-                    Arrays.toString(openApiAnnotation.methods()));
-
-            HttpMethod[] methods = openApiAnnotation.methods().length > 0 ?
-                    openApiAnnotation.methods() :
-                    new HttpMethod[]{HttpMethod.GET};
-
-            for (HttpMethod httpMethod : methods) {
-                try {
-                    registerEndpoint(webServer, httpMethod, openApiAnnotation.path(), method, handlerInstance, requiresAuth, plugin);
-                    registeredEndpoints++;
-                } catch (Exception e) {
-                    CatWalkLogger.error("Failed to register endpoint %s %s: %s",
-                            e, httpMethod, openApiAnnotation.path(), e.getMessage());
+    public void registerHandler(Object handlerInstance, String pluginName) {
+        int registered = 0;
+        for (Method method : handlerInstance.getClass().getDeclaredMethods()) {
+            BridgeEventHandler options = method.getAnnotation(BridgeEventHandler.class);
+            boolean mainThread = options != null && options.mainThread();
+            for (OpenApi api : method.getAnnotationsByType(OpenApi.class)) {
+                method.setAccessible(true);
+                EndpointDefinition endpoint = OpenApiSchemas.endpoint(api, options);
+                for (HttpMethod httpMethod : api.methods()) {
+                    webServer.get().addRoute(WebServer.toHandlerType(httpMethod), api.path(),
+                            ctx -> handleRequest(ctx, method, handlerInstance, mainThread), RouteAccess.of(endpoint));
+                    webServer.get().describeRoute(httpMethod, api.path(), RouteType.ANNOTATED, pluginName, endpoint);
+                    registered++;
                 }
             }
         }
-
-        CatWalkLogger.success("Registered %d endpoints for plugin '%s'",
-                registeredEndpoints, plugin);
+        CatWalkLogger.info("Registered %d endpoints for plugin '%s'", registered, pluginName);
     }
 
-    /**
-     * Registers an endpoint with the web server based on the HTTP method.
-     */
-    private void registerEndpoint(WebServer webServer, HttpMethod httpMethod, String path,
-                                  Method method, Object handlerInstance, boolean requiresAuth, String pluginName) {
-
-        CatWalkLogger.debug("Registering %s %s (auth: %s)", httpMethod, path, requiresAuth);
-
-        switch (httpMethod) {
-            case GET ->
-                    webServer.get(path, context -> handleRequest(context, method, handlerInstance, requiresAuth));
-            case POST ->
-                    webServer.post(path, context -> handleRequest(context, method, handlerInstance, requiresAuth));
-            case PUT ->
-                    webServer.put(path, context -> handleRequest(context, method, handlerInstance, requiresAuth));
-            case DELETE ->
-                    webServer.delete(path, context -> handleRequest(context, method, handlerInstance, requiresAuth));
-            case PATCH ->
-                    webServer.addRoute(io.javalin.http.HandlerType.PATCH, path, context -> handleRequest(context, method, handlerInstance, requiresAuth));
-            default -> {
-                CatWalkLogger.warn("Unsupported HTTP method: %s", httpMethod);
-                return;
-            }
+    private void handleRequest(Context ctx, Method method, Object handlerInstance, boolean mainThread) {
+        String validationError = validate(ctx, method);
+        if (validationError != null) {
+            ctx.status(HttpStatus.BAD_REQUEST).json(Map.of("error", validationError));
+            return;
         }
 
-        webServer.tagRoute(httpMethod, path, pluginName, requiresAuth);
-    }
-
-    /**
-     * Handles the actual request processing, invoking the method and handling the response.
-     */
-    private void handleRequest(Context context, Method method, Object handlerInstance, boolean requiresAuth) {
+        Object[] args;
         try {
-            CatWalkLogger.debug("Handling request: %s %s", context.method(), context.path());
-
-            if (requiresAuth) {
-                String authHeader = context.header("Authorization");
-                if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                    CatWalkLogger.debug("Unauthorized request to %s - missing Bearer header", context.path());
-                    context.status(HttpStatus.UNAUTHORIZED).json(Map.of("error", "Authentication required"));
-                    return;
-                }
-                
-                String token = authHeader.substring(7);
-                String configuredKey = CatWalkMain.instance.getWebServer().getAuthKey();
-                if (!token.equals(configuredKey)) {
-                    CatWalkLogger.debug("Unauthorized request to %s - invalid Bearer token", context.path());
-                    context.status(HttpStatus.UNAUTHORIZED).json(Map.of("error", "Invalid authentication token"));
-                    return;
-                }
-            }
-
-            // Validate required parameters
-            if (!validateRequiredParameters(context, method)) {
-                return; // Response already set by validation
-            }
-
-            // Prepare method arguments
-            Object[] args = prepareMethodArguments(method, context);
-
-            // Invoke the method
-            Object result = method.invoke(handlerInstance, args);
-
-            // Handle the result
-            handleMethodResult(context, result);
-
-            CatWalkLogger.debug("Successfully handled request: %s %s", context.method(), context.path());
-        } catch (Exception e) {
-            CatWalkLogger.error("Failed to invoke handler method %s: %s", e, method.getName(), e.getMessage());
-
-            if (!context.res().isCommitted()) {
-                context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of(
-                        "error", "Internal server error",
-                        "message", e.getMessage() != null ? e.getMessage() : "Unknown error",
-                        "endpoint", context.path()
-                ));
-            }
+            args = arguments(method, ctx);
+        } catch (RuntimeException e) {
+            CatWalkLogger.debug("Rejected arguments for %s: %s", ctx.path(), e.getMessage());
+            ctx.status(HttpStatus.BAD_REQUEST).json(Map.of("error", "Invalid request parameters"));
+            return;
         }
+
+        if (!mainThread) {
+            try {
+                writeResult(ctx, method.invoke(handlerInstance, args));
+            } catch (InvocationTargetException | IllegalAccessException e) {
+                fail(ctx, e instanceof InvocationTargetException ite ? ite.getCause() : e);
+            }
+            return;
+        }
+
+        CompletableFuture<Object> result = new CompletableFuture<>();
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            try {
+                result.complete(method.invoke(handlerInstance, args));
+            } catch (InvocationTargetException e) {
+                result.completeExceptionally(e.getCause());
+            } catch (IllegalAccessException | RuntimeException e) {
+                result.completeExceptionally(e);
+            }
+        });
+        writeResult(ctx, result);
     }
 
-    /**
-     * Validates required parameters before method invocation.
-     */
-    private boolean validateRequiredParameters(Context context, Method method) {
+    private void fail(Context ctx, Throwable error) {
+        CatWalkLogger.error("Handler for %s failed", error, ctx.path());
+        ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", "Internal server error"));
+    }
+
+    private String validate(Context ctx, Method method) {
         for (Parameter parameter : method.getParameters()) {
-            // Check required query parameters
-            if (parameter.isAnnotationPresent(BridgeQueryParam.class)) {
-                BridgeQueryParam queryParam = parameter.getAnnotation(BridgeQueryParam.class);
-                if (queryParam.required()) {
-                    String value = context.queryParam(queryParam.value());
-                    if (value == null || value.trim().isEmpty()) {
-                        context.status(HttpStatus.BAD_REQUEST).json(Map.of(
-                                "error", "Missing required query parameter: " + queryParam.value()
-                        ));
-                        return false;
-                    }
-                }
+            BridgeQueryParam queryParam = parameter.getAnnotation(BridgeQueryParam.class);
+            if (queryParam != null && queryParam.required() && isBlank(ctx.queryParam(queryParam.value()))) {
+                return "Missing required query parameter: " + queryParam.value();
             }
 
-            // Check required request body
-            if (parameter.isAnnotationPresent(BridgeRequestBody.class)) {
-                BridgeRequestBody requestBody = parameter.getAnnotation(BridgeRequestBody.class);
-                if (requestBody.required()) {
-                    String body = context.body();
-                    if (body == null || body.trim().isEmpty()) {
-                        context.status(HttpStatus.BAD_REQUEST).json(Map.of(
-                                "error", "Request body is required"
-                        ));
-                        return false;
-                    }
-
-                    // Validate content type if specified
-                    if (!requestBody.contentType().isEmpty()) {
-                        String contentType = context.contentType();
-                        if (contentType == null || !contentType.contains(requestBody.contentType())) {
-                            context.status(HttpStatus.BAD_REQUEST).json(Map.of(
-                                    "error", "Invalid content type. Expected: " + requestBody.contentType()
-                            ));
-                            return false;
-                        }
-                    }
+            BridgeRequestBody requestBody = parameter.getAnnotation(BridgeRequestBody.class);
+            if (requestBody != null && requestBody.required()) {
+                if (isBlank(ctx.body())) {
+                    return "Request body is required";
+                }
+                String contentType = ctx.contentType();
+                if (!requestBody.contentType().isEmpty() && (contentType == null || !contentType.contains(requestBody.contentType()))) {
+                    return "Invalid content type. Expected: " + requestBody.contentType();
                 }
             }
         }
-        return true;
+        return null;
     }
 
-    /**
-     * Prepares an array of arguments to be passed to the handler method.
-     */
-    private Object[] prepareMethodArguments(Method method, Context context) throws Exception {
+    private Object[] arguments(Method method, Context ctx) {
         Parameter[] parameters = method.getParameters();
         Object[] args = new Object[parameters.length];
-
         for (int i = 0; i < parameters.length; i++) {
-            Parameter parameter = parameters[i];
-
-            if (parameter.isAnnotationPresent(BridgePathParam.class)) {
-                BridgePathParam pathParam = parameter.getAnnotation(BridgePathParam.class);
-                String value = context.pathParam(pathParam.value());
-                args[i] = convertStringToType(value, parameter.getType());
-            }
-            // Handle legacy OpenApiParam path parameters
-            else if (parameter.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class)) {
-                io.javalin.openapi.OpenApiParam pathParam = parameter.getAnnotation(io.javalin.openapi.OpenApiParam.class);
-                String value = context.pathParam(pathParam.name());
-                args[i] = convertStringToType(value, parameter.getType());
-            }
-            // Handle query parameters
-            else if (parameter.isAnnotationPresent(BridgeQueryParam.class)) {
-                BridgeQueryParam queryParam = parameter.getAnnotation(BridgeQueryParam.class);
-                String value = context.queryParam(queryParam.value());
-
-                // Use default value if parameter is missing and default is specified
-                if (value == null && !queryParam.defaultValue().isEmpty()) {
-                    value = queryParam.defaultValue();
-                }
-
-                args[i] = convertStringToType(value, parameter.getType());
-            }
-            // Handle request body
-            else if (parameter.isAnnotationPresent(BridgeRequestBody.class)) {
-                args[i] = deserializeRequestBody(context, parameter.getType());
-            }
-            // Handle context parameter
-            else if (parameter.getType().equals(Context.class)) {
-                args[i] = context;
-            }
-            // Handle parameters without annotations (legacy support)
-            else if (!isAnnotatedParameter(parameter)) {
-                // For backward compatibility, treat non-annotated complex types as request body
-                if (!isPrimitiveOrWrapper(parameter.getType()) && !parameter.getType().equals(String.class)) {
-                    args[i] = deserializeRequestBody(context, parameter.getType());
-                } else {
-                    args[i] = null;
-                }
-            }
-            else {
-                args[i] = null;
-            }
+            args[i] = argument(parameters[i], ctx);
         }
-
         return args;
     }
 
-    /**
-     * Checks if a parameter has any bridge annotation.
-     */
-    private boolean isAnnotatedParameter(Parameter parameter) {
-        return parameter.isAnnotationPresent(BridgePathParam.class) ||
-                parameter.isAnnotationPresent(BridgeQueryParam.class) ||
-                parameter.isAnnotationPresent(BridgeRequestBody.class) ||
-                parameter.isAnnotationPresent(io.javalin.openapi.OpenApiParam.class);
-    }
-
-    /**
-     * Checks if a type is a primitive or primitive wrapper.
-     */
-    private boolean isPrimitiveOrWrapper(Class<?> type) {
-        return type.isPrimitive() ||
-                type.equals(Integer.class) ||
-                type.equals(Long.class) ||
-                type.equals(Double.class) ||
-                type.equals(Float.class) ||
-                type.equals(Boolean.class) ||
-                type.equals(Character.class) ||
-                type.equals(Byte.class) ||
-                type.equals(Short.class);
-    }
-
-    /**
-     * Deserializes the request body to the specified type.
-     */
-    private Object deserializeRequestBody(Context context, Class<?> type) throws Exception {
-        String contentType = context.contentType();
-        String body = context.body();
-
-        if (body == null || body.trim().isEmpty()) {
+    private Object argument(Parameter parameter, Context ctx) {
+        Class<?> type = parameter.getType();
+        BridgePathParam pathParam = parameter.getAnnotation(BridgePathParam.class);
+        if (pathParam != null) {
+            return convert(ctx.pathParam(pathParam.value()), type);
+        }
+        BridgeQueryParam queryParam = parameter.getAnnotation(BridgeQueryParam.class);
+        if (queryParam != null) {
+            String value = ctx.queryParam(queryParam.value());
+            return convert(value == null && !queryParam.defaultValue().isEmpty() ? queryParam.defaultValue() : value, type);
+        }
+        if (parameter.isAnnotationPresent(BridgeRequestBody.class)) {
+            return deserializeBody(ctx, type);
+        }
+        if (type == Context.class) {
+            return ctx;
+        }
+        if (type.isPrimitive() || type == String.class || OpenApiSchemas.openApiType(type).matches("integer|number|boolean")) {
             return null;
         }
+        return deserializeBody(ctx, type);
+    }
 
-        if (type.equals(String.class)) {
+    private Object deserializeBody(Context ctx, Class<?> type) {
+        String body = ctx.body();
+        if (isBlank(body)) {
+            return null;
+        }
+        if (type == String.class) {
             return body;
         }
-
-        if (contentType != null && contentType.contains("application/json")) {
+        try {
             return objectMapper.readValue(body, type);
-        } else {
-            // Try JSON as fallback
-            try {
-                return objectMapper.readValue(body, type);
-            } catch (Exception e) {
-                // If JSON parsing fails, try Gson
-                return GsonSingleton.getInstance().fromJson(body, type);
-            }
+        } catch (JacksonException e) {
+            return GsonSingleton.getInstance().fromJson(body, type);
         }
     }
 
-    /**
-     * Converts a string value to the specified type.
-     */
-    private Object convertStringToType(String value, Class<?> type) {
-        if (value == null) {
-            return null;
-        }
-
-        if (type.equals(String.class)) {
+    private Object convert(String value, Class<?> type) {
+        if (value == null || type == String.class) {
             return value;
-        } else if (type.equals(Integer.class) || type.equals(int.class)) {
-            return Integer.parseInt(value);
-        } else if (type.equals(Long.class) || type.equals(long.class)) {
-            return Long.parseLong(value);
-        } else if (type.equals(Double.class) || type.equals(double.class)) {
-            return Double.parseDouble(value);
-        } else if (type.equals(Float.class) || type.equals(float.class)) {
-            return Float.parseFloat(value);
-        } else if (type.equals(Boolean.class) || type.equals(boolean.class)) {
-            return Boolean.parseBoolean(value);
-        } else {
-            // For complex types, try to deserialize from JSON
-            try {
-                return GsonSingleton.getInstance().fromJson(value, type);
-            } catch (Exception e) {
-                return value; // Return as string if deserialization fails
-            }
         }
+        if (type == int.class || type == Integer.class) return Integer.parseInt(value);
+        if (type == long.class || type == Long.class) return Long.parseLong(value);
+        if (type == double.class || type == Double.class) return Double.parseDouble(value);
+        if (type == float.class || type == Float.class) return Float.parseFloat(value);
+        if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(value);
+        return GsonSingleton.getInstance().fromJson(value, type);
     }
 
-    /**
-     * Handles the result of the method invocation.
-     */
-    private void handleMethodResult(Context context, Object result) {
+    private void writeResult(Context ctx, Object result) {
         switch (result) {
-            case null -> {
-                if (!context.res().isCommitted()) {
-                    context.status(HttpStatus.NO_CONTENT);
+            case null -> ctx.status(HttpStatus.NO_CONTENT);
+            case CompletableFuture<?> future -> ctx.future(() -> unwrap(future).handle((value, error) -> {
+                if (error != null) {
+                    fail(ctx, error instanceof CompletionException && error.getCause() != null ? error.getCause() : error);
+                } else if (value == null) {
+                    ctx.status(HttpStatus.NO_CONTENT);
+                } else {
+                    writeResult(ctx, value);
                 }
-                return;
-            }
-
-            case CompletableFuture<?> future -> {
-                context.future(() -> future.thenAccept(value -> {
-                    if (value == null) {
-                        context.status(HttpStatus.NO_CONTENT);
-                    } else {
-                        handleBridgeApiResponse(context, value);
-                    }
-                }).exceptionally(e -> {
-                    Throwable cause = e instanceof CompletionException ? e.getCause() : e;
-                    CatWalkLogger.error("Async operation failed", cause);
-                    if (!context.res().isCommitted()) {
-                        context.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", cause.getMessage() != null ? cause.getMessage() : "Unknown error"));
-                    }
-                    return null;
-                }));
-                return;
-            }
-
-            case String s -> {
-                if (!context.res().isCommitted()) {
-                    context.result(s);
-                }
-            }
-            case byte[] bytes -> {
-                if (!context.res().isCommitted()) {
-                    context.result(bytes);
-                }
-            }
-            default -> {
-                if (!context.res().isCommitted()) {
-                    handleBridgeApiResponse(context, result);
-                }
-            }
+                return null;
+            }));
+            case String text -> ctx.result(text);
+            case byte[] bytes -> ctx.result(bytes);
+            case BridgeApiResponse<?> response -> ctx.status(response.getHttpStatus() != null ? response.getHttpStatus()
+                    : response.success ? HttpStatus.OK : HttpStatus.BAD_REQUEST).json(response);
+            default -> ctx.json(result);
         }
     }
 
-    /**
-     * Handles BridgeApiResponse objects properly by setting the correct HTTP status code.
-     */
-    private void handleBridgeApiResponse(Context context, Object result) {
-        if (result.getClass().getSimpleName().equals("BridgeApiResponse")) {
-            try {
-                var successField = result.getClass().getField("success");
-                boolean success = (Boolean) successField.get(result);
+    private static CompletableFuture<Object> unwrap(CompletableFuture<?> future) {
+        return future.thenCompose(value -> value instanceof CompletableFuture<?> inner ? unwrap(inner) : CompletableFuture.completedFuture(value));
+    }
 
-                if (!success) {
-                    // Try to get the HTTP status from the response
-                    try {
-                        var statusField = result.getClass().getField("httpStatus");
-                        HttpStatus status = (HttpStatus) statusField.get(result);
-                        context.status(status);
-                    } catch (Exception e) {
-                        // Default to BAD_REQUEST if no status field found
-                        context.status(HttpStatus.BAD_REQUEST);
-                    }
-                } else {
-                    context.status(HttpStatus.OK);
-                }
-
-                context.json(result);
-            } catch (Exception e) {
-                CatWalkLogger.error("Failed to handle BridgeApiResponse status: %s", e, e.getMessage());
-                context.json(result);
-            }
-        } else {
-            context.json(result);
-        }
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }
